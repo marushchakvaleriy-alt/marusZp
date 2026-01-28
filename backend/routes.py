@@ -1,0 +1,256 @@
+import os
+import shutil
+from typing import List, Optional
+from datetime import date
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
+from sqlmodel import Session, select
+from database import get_session
+from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, ActivityLog, ActivityLogRead
+from payments import Payment, PaymentAllocation, PaymentRead
+from payment_service import PaymentDistributionService
+from pydantic import BaseModel
+
+router = APIRouter()
+
+# Payment DTOs
+class PaymentCreate(BaseModel):
+    amount: float
+    date_received: date
+    notes: Optional[str] = None
+    manual_order_id: Optional[int] = None  # Якщо вказано, розподіл на конкретне замовлення
+
+def log_activity(session: Session, action_type: str, description: str, details: Optional[str] = None):
+    try:
+        log = ActivityLog(action_type=action_type, description=description, details=details)
+        session.add(log)
+        session.commit()
+    except Exception as e:
+        print(f"Failed to log activity: {e}")
+
+@router.get("/logs", response_model=List[ActivityLogRead])
+def get_logs(session: Session = Depends(get_session)):
+    return session.exec(select(ActivityLog).order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())).all()
+
+@router.post("/orders/", response_model=OrderRead)
+def create_order(order: OrderCreate, session: Session = Depends(get_session)):
+    db_order = Order.from_orm(order)
+    session.add(db_order)
+    session.commit()
+    session.refresh(db_order)
+    log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}'")
+    return OrderRead.from_order(db_order)
+
+@router.get("/orders/", response_model=List[OrderRead])
+def read_orders(session: Session = Depends(get_session)):
+    orders = session.exec(select(Order)).all()
+    return [OrderRead.from_order(order) for order in orders]
+
+@router.get("/orders/{order_id}", response_model=OrderRead)
+def read_order(order_id: int, session: Session = Depends(get_session)):
+    order = session.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return OrderRead.from_order(order)
+
+@router.patch("/orders/{order_id}", response_model=OrderRead)
+def update_order(order_id: int, order_update: OrderUpdate, session: Session = Depends(get_session)):
+    db_order = session.get(Order, order_id)
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order_data = order_update.dict(exclude_unset=True)
+    for key, value in order_data.items():
+        setattr(db_order, key, value)
+    
+    session.add(db_order)
+    session.commit()
+    session.refresh(db_order)
+    return OrderRead.from_order(db_order)
+
+@router.delete("/orders/{order_id}")
+def delete_order(order_id: int, session: Session = Depends(get_session)):
+    db_order = session.get(Order, order_id)
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order_name = db_order.name # Save name for log
+    session.delete(db_order)
+    session.commit()
+    log_activity(session, "DELETE_ORDER", f"Видалено замовлення #{order_id} '{order_name}'")
+    return {"message": "Order deleted successfully"}
+
+# Payment endpoints
+@router.post("/payments/")
+def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_session)):
+    """Додати платіж і автоматично розподілити його"""
+    payment = Payment(
+        amount=payment_data.amount,
+        date_received=payment_data.date_received,
+        notes=payment_data.notes,
+        allocated_automatically=payment_data.manual_order_id is None
+    )
+    session.add(payment)
+    session.commit()
+    session.refresh(payment)
+    
+    # Розподілити платіж
+    allocations, remaining = PaymentDistributionService.distribute_payment(
+        payment_data.amount,
+        session,
+        manual_order_id=payment_data.manual_order_id
+    )
+    
+    # Зберегти allocations
+    for alloc in allocations:
+        allocation = PaymentAllocation(
+            payment_id=payment.id,
+            order_id=alloc["order_id"],
+            stage=alloc["stage"],
+            amount=alloc["amount"]
+        )
+        session.add(allocation)
+    
+    session.commit()
+    
+    
+    log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
+    return {
+        "payment_id": payment.id,
+        "allocations": allocations,
+        "remaining_amount": remaining,
+        "message": f"Платіж розподілено. Залишок: {remaining:.2f} грн" if remaining > 0 else "Платіж повністю розподілено"
+    }
+
+@router.get("/payments/", response_model=List[PaymentRead])
+def get_payments(session: Session = Depends(get_session)):
+    """Отримати історію всіх платежів"""
+    payments = session.exec(select(Payment).order_by(Payment.date_received.desc())).all()
+    return payments
+
+@router.get("/payments/{payment_id}/allocations")
+def get_payment_allocations(payment_id: int, session: Session = Depends(get_session)):
+    """Отримати розподіл конкретного платежу"""
+    allocations = session.exec(
+        select(PaymentAllocation).where(PaymentAllocation.payment_id == payment_id)
+    ).all()
+    
+    result = []
+    for alloc in allocations:
+        order = session.get(Order, alloc.order_id)
+        result.append({
+            "order_id": alloc.order_id,
+            "order_name": order.name if order else "Unknown",
+            "stage": "Аванс" if alloc.stage == "advance" else "Фінальна оплата",
+            "amount": alloc.amount
+        })
+    
+    return result
+
+# File Management
+FILES_DIR = "files_storage"
+
+@router.post("/orders/{order_id}/files/{folder_name}")
+def upload_file(order_id: int, folder_name: str, file: UploadFile = File(...)):
+    allowed_folders = ["Проджекти", "Перекупні позиції", "Метал", "Креслення", "Погодження", "Фурнітура"]
+    if folder_name not in allowed_folders:
+        raise HTTPException(status_code=400, detail="Invalid folder name")
+    
+    path = os.path.join(FILES_DIR, str(order_id), folder_name)
+    os.makedirs(path, exist_ok=True)
+    
+    file_location = os.path.join(path, file.filename)
+    with open(file_location, "wb+") as file_object:
+        shutil.copyfileobj(file.file, file_object)
+    
+    return {"filename": file.filename, "path": file_location}
+
+@router.get("/orders/{order_id}/files/{folder_name}")
+def list_files(order_id: int, folder_name: str):
+    path = os.path.join(FILES_DIR, str(order_id), folder_name)
+    if not os.path.exists(path):
+        return []
+    
+    files = []
+    for filename in os.listdir(path):
+        files.append({"name": filename, "url": f"/orders/{order_id}/files/{folder_name}/{filename}"})
+    return files
+
+@router.get("/orders/{order_id}/files/{folder_name}/{filename}")
+def download_file(order_id: int, folder_name: str, filename: str):
+    path = os.path.join(FILES_DIR, str(order_id), folder_name, filename)
+    if os.path.exists(path):
+         return FileResponse(path)
+    raise HTTPException(status_code=404, detail="File not found")
+
+# Deduction endpoints
+@router.post("/deductions/")
+def create_deduction(deduction_data: DeductionCreate, session: Session = Depends(get_session)):
+    # Verify order exists
+    order = session.get(Order, deduction_data.order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    deduction = Deduction(**deduction_data.dict())
+    session.add(deduction)
+    session.commit()
+    session.refresh(deduction)
+    
+    log_activity(session, "ADD_DEDUCTION", f"Додано штраф/провину {deduction.amount} грн для замовлення '{order.name}'")
+    return DeductionRead.from_deduction(deduction, order.name)
+
+@router.get("/deductions/")
+def get_deductions(order_id: int = None, session: Session = Depends(get_session)):
+    if order_id:
+        deductions = session.exec(
+            select(Deduction).where(Deduction.order_id == order_id)
+        ).all()
+    else:
+        deductions = session.exec(select(Deduction)).all()
+    
+    result = []
+    for ded in deductions:
+        order = session.get(Order, ded.order_id)
+        result.append(DeductionRead.from_deduction(ded, order.name if order else "Unknown"))
+    
+    return result
+
+@router.delete("/deductions/{deduction_id}")
+def delete_deduction(deduction_id: int, session: Session = Depends(get_session)):
+    deduction = session.get(Deduction, deduction_id)
+    if not deduction:
+        raise HTTPException(status_code=404, detail="Deduction not found")
+    
+    deduction_amount = deduction.amount # Save for log
+    session.delete(deduction)
+    session.commit()
+    log_activity(session, "DELETE_DEDUCTION", f"Видалено штраф #{deduction_id} ({deduction_amount} грн)")
+    return {"message": "Deduction deleted successfully"}
+
+@router.get("/stats/financial")
+def get_financial_stats(session: Session = Depends(get_session)):
+    from sqlalchemy import func
+    from payments import Payment, PaymentAllocation
+    
+    try:
+        total_received = session.exec(select(func.sum(Payment.amount))).one()
+        total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
+        
+        # one() on sum can return None if table is empty
+        if total_received is None: total_received = 0.0
+        if total_allocated is None: total_allocated = 0.0
+        
+        unallocated = total_received - total_allocated
+        
+        return {
+            "total_received": total_received,
+            "total_allocated": total_allocated,
+            "unallocated": unallocated
+        }
+    except Exception as e:
+        print(f"Error calculating stats: {e}")
+        return {
+            "total_received": 0.0,
+            "total_allocated": 0.0,
+            "unallocated": 0.0
+        }
