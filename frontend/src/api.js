@@ -4,7 +4,13 @@ const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
 });
 
+export const resetDatabase = async (password) => {
+    const response = await api.delete('/admin/reset', { data: { password } });
+    return response.data;
+};
+
 export const getOrders = async () => {
+
     const response = await api.get('/orders/');
     return response.data;
 };

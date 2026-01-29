@@ -266,7 +266,7 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                 <p className="text-slate-400 text-[10px] font-bold tracking-widest uppercase mt-1">Детальна інформація та документація</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-[10px] text-blue-400 font-bold uppercase">Загальний бонус:</p>
+                                <p className="text-[10px] text-blue-400 font-bold uppercase">Загальний ПГ:</p>
                                 <p className="text-2xl font-black">{order.bonus.toLocaleString()} ₴</p>
                             </div>
                         </div>
@@ -410,16 +410,16 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                 <div
                                     key={deduction.id}
                                     className={`p-4 rounded-xl border-2 ${deduction.is_paid
-                                            ? 'bg-green-50 border-green-200'
-                                            : 'bg-red-50 border-red-200'
+                                        ? 'bg-green-50 border-green-200'
+                                        : 'bg-red-50 border-red-200'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <span className={`text-xs font-bold px-3 py-1 rounded-full ${deduction.is_paid
-                                                        ? 'bg-green-200 text-green-800'
-                                                        : 'bg-red-200 text-red-800'
+                                                    ? 'bg-green-200 text-green-800'
+                                                    : 'bg-red-200 text-red-800'
                                                     }`}>
                                                     {deduction.is_paid ? '✓ Погашено' : '× Не погашено'}
                                                 </span>

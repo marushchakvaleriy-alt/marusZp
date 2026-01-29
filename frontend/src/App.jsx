@@ -4,7 +4,7 @@ import OrderList from './components/OrderList';
 import OrderDetail from './components/OrderDetail';
 import PaymentHistory from './components/PaymentHistory';
 import DeductionsList from './components/DeductionsList';
-import { getOrder } from './api';
+import { getOrder, resetDatabase } from './api';
 import ActivityLog from './components/ActivityLog';
 
 function App() {
@@ -28,6 +28,24 @@ function App() {
         setStatsRefreshKey(prev => prev + 1);
     };
 
+    const handleResetDatabase = async () => {
+        const password = prompt("Введіть пароль для очищення всієї бази даних:");
+        if (!password) return;
+
+        try {
+            await resetDatabase(password);
+            alert("Базу даних успішно очищено!");
+            window.location.reload();
+        } catch (error) {
+            console.error("Reset failed:", error);
+            if (error.response && error.response.status === 403) {
+                alert("Невірний пароль!");
+            } else {
+                alert("Помилка при очищенні бази даних.");
+            }
+        }
+    };
+
     return (
         <div className="min-h-screen p-4 lg:p-8">
             <div className="max-w-[1600px] mx-auto">
@@ -35,6 +53,12 @@ function App() {
                     <>
                         <Dashboard key={statsRefreshKey} />
                         <div className="mb-6 flex justify-end gap-3 flex-wrap">
+                            <button
+                                onClick={handleResetDatabase}
+                                className="px-6 py-2 bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 hover:bg-black transition flex items-center gap-2"
+                            >
+                                <i className="fas fa-trash-alt"></i> Очистити все
+                            </button>
                             <button
                                 onClick={() => setCurrentView('activity')}
                                 className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
@@ -54,7 +78,7 @@ function App() {
                                 <i className="fas fa-history"></i> Історія платежів
                             </button>
                         </div>
-                        <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} />
+                        <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} key={statsRefreshKey} />
                     </>
                 )}
 

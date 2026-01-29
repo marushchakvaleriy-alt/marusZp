@@ -241,7 +241,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
                             <th className="p-4 border-b font-bold">Виріб / Об'єкт</th>
                             <th className="p-4 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
                             <th className="p-4 border-b text-right font-bold">Ціна (100%)</th>
-                            <th className="p-4 border-b text-right font-bold text-blue-500">Бонус (5%)</th>
+                            <th className="p-4 border-b text-right font-bold text-blue-500">ПГ (5%)</th>
                             <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/50">Етап I: Конструктив (50%)</th>
                             <th className="p-4 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/30">Етап II: Монтаж (50%)</th>
                             <th className="p-4 pr-6 border-b text-right font-bold">Борг/Залишок</th>

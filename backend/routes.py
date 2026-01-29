@@ -266,3 +266,27 @@ def get_financial_stats(session: Session = Depends(get_session)):
             "total_allocated": 0.0,
             "unallocated": 0.0
         }
+
+class ResetRequest(BaseModel):
+    password: str
+
+@router.delete("/admin/reset")
+def reset_database(request: ResetRequest, session: Session = Depends(get_session)):
+    if request.password != "Gjksyrf":
+        raise HTTPException(status_code=403, detail="Incorrect password")
+    
+    # Delete all data from tables in correct order (child first)
+    from sqlmodel import delete
+    
+    session.exec(delete(PaymentAllocation))
+    session.exec(delete(Deduction))
+    session.exec(delete(OrderFile))
+    session.exec(delete(ActivityLog))
+    session.exec(delete(Payment))
+    session.exec(delete(Order))
+    
+    session.commit()
+    
+    log_activity(session, "SYSTEM_RESET", "Всі дані було очищено адміністратором")
+    return {"message": "All data has been reset"}
+
