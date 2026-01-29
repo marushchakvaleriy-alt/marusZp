@@ -166,3 +166,25 @@ class ActivityLogRead(BaseModel):
     action_type: str
     description: str
     details: Optional[str] = None
+
+# Order File Model (Links to external storage like Google Drive)
+class OrderFile(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="order.id")
+    name: str
+    url: str
+    folder_name: str
+    upload_date: date = Field(default_factory=date.today)
+
+class OrderFileCreate(BaseModel):
+    name: str
+    url: str
+    folder_name: str
+
+class OrderFileRead(BaseModel):
+    id: int
+    order_id: int
+    name: str
+    url: str
+    folder_name: str
+    upload_date: date

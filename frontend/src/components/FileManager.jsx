@@ -1,23 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getFiles, addFileLink, deleteFileLink } from '../api';
 
 const FileManager = ({ projectId, onBack }) => {
-    // TODO: Fetch files from API
     const [currentFolder, setCurrentFolder] = useState(null);
+    const [files, setFiles] = useState([]);
+    const [loading, setLoading] = useState(false);
 
-    // Placeholder folders
+    // Form state
+    const [newFileName, setNewFileName] = useState('');
+    const [newFileUrl, setNewFileUrl] = useState('');
+    const [isAdding, setIsAdding] = useState(false);
+
     const folders = [
-        { name: 'Проджекти', icon: 'fa-project-diagram', color: 'text-slate-400' },
-        { name: 'Перекупні позиції', icon: 'fa-shopping-cart', color: 'text-slate-400' },
-        { name: 'Метал', icon: 'fa-hammer', color: 'text-slate-400' },
-        { name: 'Креслення', icon: 'fa-print', color: 'text-blue-600', active: true },
-        { name: 'Погодження', icon: 'fa-file-signature', color: 'text-slate-400' },
-        { name: 'Фурнітура', icon: 'fa-boxes', color: 'text-slate-400' }
+        { name: 'Проджекти', icon: 'fa-project-diagram' },
+        { name: 'Перекупні позиції', icon: 'fa-shopping-cart' },
+        { name: 'Метал', icon: 'fa-hammer' },
+        { name: 'Креслення', icon: 'fa-print' },
+        { name: 'Погодження', icon: 'fa-file-signature' },
+        { name: 'Фурнітура', icon: 'fa-boxes' }
     ];
 
-    // Placeholder files for demo
-    const files = [
-        { name: "Специфікація_Корпуси_V2.pdf", date: "14.03.2025", size: "4.2 MB", type: "PDF" }
-    ];
+    const loadFiles = async () => {
+        try {
+            setLoading(true);
+            const data = await getFiles(projectId);
+            setFiles(data);
+        } catch (error) {
+            console.error("Failed to load files:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (projectId) {
+            loadFiles();
+        }
+    }, [projectId]);
+
+    const handleAddLink = async (e) => {
+        e.preventDefault();
+        if (!newFileName || !newFileUrl) return;
+
+        try {
+            setIsAdding(true);
+            await addFileLink(projectId, {
+                name: newFileName,
+                url: newFileUrl,
+                folder_name: currentFolder
+            });
+            setNewFileName('');
+            setNewFileUrl('');
+            await loadFiles();
+        } catch (error) {
+            console.error("Failed to add link:", error);
+            alert("Помилка при додаванні посилання");
+        } finally {
+            setIsAdding(false);
+        }
+    };
+
+    const handleDelete = async (fileId) => {
+        if (!window.confirm("Видалити це посилання?")) return;
+        try {
+            await deleteFileLink(fileId);
+            await loadFiles();
+        } catch (error) {
+            console.error("Failed to delete link:", error);
+        }
+    };
+
+    const currentFiles = files.filter(f => f.folder_name === currentFolder);
 
     if (currentFolder) {
         return (
@@ -32,31 +85,75 @@ const FileManager = ({ projectId, onBack }) => {
                             <i className="fas fa-folder-open text-2xl"></i>
                             <h2 className="text-xl font-extrabold uppercase italic tracking-widest">{currentFolder}</h2>
                         </div>
-                        <button className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition italic">
-                            Завантажити все .ZIP
-                        </button>
                     </div>
 
-                    {/* Upload Area (Visual Only for now) */}
-                    <div className="p-4 border-b border-slate-100 bg-slate-50/50 text-center py-8 border-dashed border-2 border-slate-200 m-4 rounded-2xl cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition">
-                        <p className="text-slate-400 text-xs font-bold uppercase">Натисніть або перетягніть файли сюди</p>
-                    </div>
-
-                    <div className="p-4 space-y-2">
-                        {files.map((file, idx) => (
-                            <div key={idx} className="flex justify-between items-center p-4 hover:bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 transition group">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center font-black text-xs">{file.type}</div>
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-700">{file.name}</p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase italic">Завантажено: {file.date} • {file.size}</p>
-                                    </div>
-                                </div>
-                                <a href="#" className="w-10 h-10 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition">
-                                    <i className="fas fa-download"></i>
-                                </a>
+                    {/* Add Link Form */}
+                    <div className="p-6 border-b border-slate-100 bg-slate-50">
+                        <form onSubmit={handleAddLink} className="flex gap-4 items-end flex-wrap md:flex-nowrap">
+                            <div className="flex-1 min-w-[200px]">
+                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Назва файлу</label>
+                                <input
+                                    type="text"
+                                    value={newFileName}
+                                    onChange={(e) => setNewFileName(e.target.value)}
+                                    placeholder="Напр. Кухня План версія 1"
+                                    className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-500 outline-none text-sm font-bold text-slate-700"
+                                    required
+                                />
                             </div>
-                        ))}
+                            <div className="flex-[2] min-w-[200px]">
+                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Посилання (Google Drive/Docs)</label>
+                                <input
+                                    type="url"
+                                    value={newFileUrl}
+                                    onChange={(e) => setNewFileUrl(e.target.value)}
+                                    placeholder="https://drive.google.com/..."
+                                    className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-500 outline-none text-sm font-bold text-slate-700"
+                                    required
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isAdding}
+                                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition disabled:opacity-50 h-[42px]"
+                            >
+                                {isAdding ? '...' : <><i className="fas fa-link mr-2"></i> Додати посилання</>}
+                            </button>
+                        </form>
+                    </div>
+
+                    <div className="p-4 space-y-2 min-h-[200px]">
+                        {loading ? (
+                            <p className="text-center text-slate-400 py-10 font-bold text-xs uppercase animate-pulse">Завантаження...</p>
+                        ) : currentFiles.length === 0 ? (
+                            <div className="text-center py-10 opacity-50">
+                                <i className="fas fa-inbox text-4xl text-slate-300 mb-2"></i>
+                                <p className="text-slate-400 text-xs font-bold uppercase">В цій папці поки немає посилань</p>
+                            </div>
+                        ) : (
+                            currentFiles.map((file) => (
+                                <div key={file.id} className="flex justify-between items-center p-4 hover:bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 transition group">
+                                    <div className="flex items-center gap-4 overflow-hidden">
+                                        <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center font-black text-xl shrink-0">
+                                            <i className="fab fa-google-drive"></i>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-700 truncate">{file.name}</p>
+                                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:text-blue-600 font-bold uppercase italic truncate block hover:underline">
+                                                {file.url}
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleDelete(file.id)}
+                                        className="w-10 h-10 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition opacity-0 group-hover:opacity-100"
+                                        title="Видалити"
+                                    >
+                                        <i className="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>
@@ -73,10 +170,10 @@ const FileManager = ({ projectId, onBack }) => {
                     <button
                         key={folder.name}
                         onClick={() => setCurrentFolder(folder.name)}
-                        className={`folder-btn p-6 rounded-3xl flex flex-col items-center gap-3 ${folder.active ? 'bg-blue-50 border-solid border-blue-500' : ''}`}
+                        className="folder-btn p-6 rounded-3xl flex flex-col items-center gap-3 bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 hover:-translate-y-1 transition group"
                     >
-                        <i className={`fas ${folder.icon} text-2xl ${folder.active ? 'text-blue-600' : 'text-slate-400'}`}></i>
-                        <span className={`text-[10px] font-bold uppercase italic text-center ${folder.active ? 'text-blue-700' : ''}`}>
+                        <i className={`fas ${folder.icon} text-2xl text-slate-300 group-hover:text-blue-500 transition`}></i>
+                        <span className="text-[10px] font-bold uppercase italic text-center text-slate-500 group-hover:text-blue-700">
                             {folder.name}
                         </span>
                     </button>

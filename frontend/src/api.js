@@ -44,10 +44,21 @@ export const getPaymentAllocations = async (paymentId) => {
     return response.data;
 };
 
-export const getFiles = async (orderId, folder) => {
-    const response = await api.get(`/orders/${orderId}/files/${folder}`);
+export const getFiles = async (orderId) => {
+    const response = await api.get(`/orders/${orderId}/files`);
     return response.data;
 };
+
+export const addFileLink = async (orderId, fileData) => {
+    const response = await api.post(`/orders/${orderId}/files`, fileData);
+    return response.data;
+};
+
+export const deleteFileLink = async (fileId) => {
+    const response = await api.delete(`/files/${fileId}`);
+    return response.data;
+};
+
 
 // Deductions
 export const getDeductions = async (orderId = null) => {

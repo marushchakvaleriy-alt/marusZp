@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 from database import get_session
-from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, ActivityLog, ActivityLogRead
+from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead
 from payments import Payment, PaymentAllocation, PaymentRead
 from payment_service import PaymentDistributionService
 from pydantic import BaseModel
@@ -148,40 +148,52 @@ def get_payment_allocations(payment_id: int, session: Session = Depends(get_sess
     return result
 
 # File Management
-FILES_DIR = "files_storage"
+# File Link Management
+@router.get("/orders/{order_id}/files", response_model=List[OrderFileRead])
+def get_order_files(order_id: int, session: Session = Depends(get_session)):
+    return session.exec(select(OrderFile).where(OrderFile.order_id == order_id)).all()
 
-@router.post("/orders/{order_id}/files/{folder_name}")
-def upload_file(order_id: int, folder_name: str, file: UploadFile = File(...)):
-    allowed_folders = ["Проджекти", "Перекупні позиції", "Метал", "Креслення", "Погодження", "Фурнітура"]
-    if folder_name not in allowed_folders:
-        raise HTTPException(status_code=400, detail="Invalid folder name")
+@router.post("/orders/{order_id}/files", response_model=OrderFileRead)
+def add_file_link(order_id: int, file_data: OrderFileCreate, session: Session = Depends(get_session)):
+    order = session.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    new_file = OrderFile(
+        order_id=order_id,
+        name=file_data.name,
+        url=file_data.url,
+        folder_name=file_data.folder_name
+    )
+    session.add(new_file)
+    session.commit()
+    session.refresh(new_file)
     
-    path = os.path.join(FILES_DIR, str(order_id), folder_name)
-    os.makedirs(path, exist_ok=True)
+    # Log action
+    log_activity(session, "ADD_FILE", f"Додано посилання на файл '{new_file.name}' до замовлення '{order.name}'")
     
-    file_location = os.path.join(path, file.filename)
-    with open(file_location, "wb+") as file_object:
-        shutil.copyfileobj(file.file, file_object)
-    
-    return {"filename": file.filename, "path": file_location}
+    return new_file
 
-@router.get("/orders/{order_id}/files/{folder_name}")
-def list_files(order_id: int, folder_name: str):
-    path = os.path.join(FILES_DIR, str(order_id), folder_name)
-    if not os.path.exists(path):
-        return []
+@router.delete("/files/{file_id}")
+def delete_file_link(file_id: int, session: Session = Depends(get_session)):
+    file_link = session.get(OrderFile, file_id)
+    if not file_link:
+        raise HTTPException(status_code=404, detail="File link not found")
+        
+    order = session.get(Order, file_link.order_id)
+    order_name = order.name if order else "Unknown"
+    file_name = file_link.name
     
-    files = []
-    for filename in os.listdir(path):
-        files.append({"name": filename, "url": f"/orders/{order_id}/files/{folder_name}/{filename}"})
-    return files
+    session.delete(file_link)
+    session.commit()
+    
+    # Log action
+    log_activity(session, "DELETE_FILE", f"Видалено посилання на файл '{file_name}' із замовлення '{order_name}'")
+    
+    return {"ok": True}
 
-@router.get("/orders/{order_id}/files/{folder_name}/{filename}")
-def download_file(order_id: int, folder_name: str, filename: str):
-    path = os.path.join(FILES_DIR, str(order_id), folder_name, filename)
-    if os.path.exists(path):
-         return FileResponse(path)
-    raise HTTPException(status_code=404, detail="File not found")
+    
+
 
 # Deduction endpoints
 @router.post("/deductions/")
