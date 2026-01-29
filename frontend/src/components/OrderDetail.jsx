@@ -1,6 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { updateOrder, deleteOrder, getDeductions, createDeduction, deleteDeduction } from '../api';
-import FileManager from './FileManager';
+// Editable Date Component
+const EditableDate = ({ value, onSave, className, emptyText = "--.--.--" }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [dateValue, setDateValue] = useState(value || '');
+
+    useEffect(() => {
+        setDateValue(value || '');
+    }, [value]);
+
+    const handleSave = () => {
+        setIsEditing(false);
+        if (dateValue !== value) {
+            onSave(dateValue || null);
+        }
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSave();
+        if (e.key === 'Escape') {
+            setIsEditing(false);
+            setDateValue(value || '');
+        }
+    };
+
+    if (isEditing) {
+        return (
+            <input
+                type="date"
+                autoFocus
+                className={`px-2 py-1 border border-blue-300 rounded shadow-sm outline-none text-sm ${className}`}
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+                onBlur={handleSave}
+                onKeyDown={handleKeyDown}
+                onClick={(e) => e.stopPropagation()}
+            />
+        );
+    }
+
+    const formatDate = (dateString) => {
+        if (!dateString) return emptyText;
+        const date = new Date(dateString);
+        return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    };
+
+    return (
+        <span
+            onClick={() => setIsEditing(true)}
+            className={`cursor-pointer hover:bg-black/5 px-2 py-0.5 rounded transition border border-transparent hover:border-black/10 items-center inline-flex gap-1 group ${className}`}
+            title="Натисніть, щоб змінити дату"
+        >
+            {formatDate(value)}
+            <i className="fas fa-pen text-[8px] opacity-0 group-hover:opacity-100 text-slate-400"></i>
+        </span>
+    );
+};
 
 const OrderDetail = ({ order, onBack, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -40,9 +93,19 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
         }
     };
 
-    const handleSave = async () => {
+    const handleQuickUpdate = async (field, value) => {
         try {
-            // Convert empty strings to null for dates
+            await updateOrder(order.id, { [field]: value });
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            console.error('Failed to update order:', error);
+            alert('Помилка при збереженні дати');
+        }
+    };
+
+    const handleSave = async () => {
+        // ... existing handleSave logic ...
+        try {
             const updateData = Object.fromEntries(
                 Object.entries(formData).map(([key, value]) => [
                     key,
@@ -52,13 +115,14 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
 
             await updateOrder(order.id, updateData);
             setIsEditing(false);
-            if (onUpdate) onUpdate(); // Refresh data
+            if (onUpdate) onUpdate();
         } catch (error) {
             console.error('Failed to update order:', error);
             alert('Помилка при збереженні');
         }
     };
 
+    // ... restore other handlers ...
     const handleSaveInfo = async () => {
         try {
             const updateData = {
@@ -66,7 +130,6 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                 price: parseFloat(infoData.price),
                 product_types: JSON.stringify(infoData.product_types)
             };
-
             await updateOrder(order.id, updateData);
             setIsEditingInfo(false);
             if (onUpdate) onUpdate();
@@ -158,6 +221,9 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
         const date = new Date(dateString);
         return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
     };
+
+    // ... Return JSX ...
+
 
     return (
         <div id="project-page">
@@ -328,7 +394,11 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                         onChange={e => setFormData({ ...formData, date_to_work: e.target.value })}
                                     />
                                 ) : (
-                                    <span className="font-bold">{formatDate(order.date_to_work)}</span>
+                                    <EditableDate
+                                        value={order.date_to_work}
+                                        onSave={(val) => handleQuickUpdate('date_to_work', val)}
+                                        className="font-bold cursor-pointer"
+                                    />
                                 )}
                             </div>
                             <div className="flex justify-between"><span>Сума авансу:</span><span className="mono font-bold">{order.advance_amount.toLocaleString()} ₴</span></div>
@@ -342,7 +412,12 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                         onChange={e => setFormData({ ...formData, date_advance_paid: e.target.value })}
                                     />
                                 ) : (
-                                    <span>{formatDate(order.date_advance_paid) === '--.--.--' ? 'Очікується' : formatDate(order.date_advance_paid)}</span>
+                                    <EditableDate
+                                        value={order.date_advance_paid}
+                                        onSave={(val) => handleQuickUpdate('date_advance_paid', val)}
+                                        emptyText="Очікується"
+                                        className="text-emerald-700"
+                                    />
                                 )}
                             </div>
                         </div>
@@ -362,7 +437,11 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                         onChange={e => setFormData({ ...formData, date_installation: e.target.value })}
                                     />
                                 ) : (
-                                    <span className="font-bold">{formatDate(order.date_installation)}</span>
+                                    <EditableDate
+                                        value={order.date_installation}
+                                        onSave={(val) => handleQuickUpdate('date_installation', val)}
+                                        className="font-bold"
+                                    />
                                 )}
                             </div>
                             <div className="flex justify-between"><span>Сума залишку:</span><span className="mono font-bold">{order.remainder_amount.toLocaleString()} ₴</span></div>
@@ -376,9 +455,12 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                         onChange={e => setFormData({ ...formData, date_final_paid: e.target.value })}
                                     />
                                 ) : (
-                                    <span className={`italic uppercase ${order.is_critical_debt ? 'text-red-600 font-black' : ''}`}>
-                                        {formatDate(order.date_final_paid) === '--.--.--' ? 'Очікується' : formatDate(order.date_final_paid)}
-                                    </span>
+                                    <EditableDate
+                                        value={order.date_final_paid}
+                                        onSave={(val) => handleQuickUpdate('date_final_paid', val)}
+                                        emptyText="Очікується"
+                                        className={`italic uppercase ${order.is_critical_debt ? 'text-red-600 font-black' : ''}`}
+                                    />
                                 )}
                             </div>
                         </div>
