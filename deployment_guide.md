@@ -28,24 +28,39 @@ git push -u origin main
 1. Зайдіть на [render.com](https://render.com/).
 2. Натисніть **Sign Up** -> **GitHub**.
 
-## Крок 3: Запуск сервера (Backend)
+## Крок 3: Створення Бази Даних (PostgreSQL)
 
-Це "мізки" сайту (база даних, розрахунки).
+Сайт не може "запам'ятовувати" дані просто в повітрі, йому потрібна база.
+
+1. У Render Dashboard натисніть **New +** -> **PostgreSQL**.
+2. Налаштування:
+    - **Name**: `payroll-db`
+    - **Region**: Frankfurt
+    - Натисніть **Create Database**.
+3. Коли вона створиться, знайдіть розділ **Connections** і скопіюйте **Internal Database URL** (воно починається на `postgres://...`). **Збережіть його!**
+
+## Крок 4: Запуск сервера (Backend)
+
+Це "мізки" сайту.
 
 1. У Render Dashboard натисніть **New +** -> **Web Service**.
 2. Виберіть ваш репозиторій `payroll-app`.
 3. Налаштування:
     - **Name**: `payroll-backend`
-    - **Region**: Frankfurt (найближче)
+    - **Region**: Frankfurt
     - **Branch**: `main`
     - **Root Directory**: `backend`
     - **Environment**: Python 3
     - **Build Command**: `pip install -r requirements.txt`
     - **Start Command**: `gunicorn main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:10000`
-4. Натисніть **Create Web Service**.
-5. Зачекайте, поки він запуститься. Зверху з'явиться посилання типу `https://payroll-backend-xv32.onrender.com`. **Скопіюйте його!**
+4. **Environment Variables** (Важливо!):
+    - Натисніть **Advanced** -> **Add Environment Variable**.
+    - **Key**: `DATABASE_URL`
+    - **Value**: Вставте те довге посилання `postgres://...`, яке ви скопіювали в Кроці 3.
+5. Натисніть **Create Web Service**.
+6. Зачекайте запуску. Скопіюйте посилання на сервіс (наприклад `https://payroll-backend-xv32.onrender.com`).
 
-## Крок 4: Запуск сайту (Frontend)
+## Крок 5: Запуск сайту (Frontend)
 
 Це те, що бачите ви і клієнт.
 
