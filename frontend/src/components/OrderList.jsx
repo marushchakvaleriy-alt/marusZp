@@ -381,68 +381,14 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
 
                                     <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
                                         {(() => {
-                                            const unpaidFines = deductions
-                                                .filter(d => d.order_id === order.id && !d.is_paid)
-                                                .reduce((sum, d) => sum + d.amount, 0);
-
                                             // Determine base amount: if critical debt, use current_debt. Otherwise use remainder.
-                                            // Ideally, we want the "balance" of the order.
-                                            // If paid, remainder is 0. Balance = 0 - fines = -fines.
-                                            // If debt, balance = debt - fines.
-
-                                            // Note: current_debt is accurate for active debts. remainder_amount is for total contract remaining.
-                                            // If order is paid, current_debt is 0.
-
-                                            const baseAmount = order.is_critical_debt ? order.current_debt : order.remainder_amount;
-                                            const netBalance = baseAmount - unpaidFines;
-
-                                            // If critical debt, we usually show negative to imply "Debt".
-                                            // But if we simply show the signed value, positive = they owe us? No.
-                                            // Usually in this table: positive = remaining to be paid (normal).
-                                            // Negative (red) = critical debt.
-                                            // So if netBalance is 100 (normal), show 100.
-                                            // If netBalance is 100 (critical), show -100?
-
-                                            // Let's stick to the previous pattern:
-                                            // If is_critical_debt, we explicitly added '-'.
-                                            // Now we want to subtract fines. 
-                                            // If debt 100, fine 20 -> 80. Show -80.
-                                            // If debt 100, fine 120 -> -20. Show +20? (Credit).
-
-                                            // Let's try treating it as "Amount Owed by User".
-                                            // Normal: Remainder (e.g. 2500). User owes 2500.
-                                            // Critical: Current Debt (e.g. 125). User owes 125.
-                                            // Fine: Reduces amount user owes.
-
-                                            // So "Display Value" = (is_critical ? -current_debt : remainder) + fines?
-                                            // No, wait.
-                                            // User requested: Fines reduce debt.
-                                            // If I owe 100, and fine is 50 -> I owe 50.
-                                            // If I owe 100 (critical), display is "-100".
-                                            // Reduced debt should be "-50".
-
-                                            // So: `effectiveDebt = current_debt - fines`.
-                                            // Display: `-(effectiveDebt)`.
-
-                                            // Case: Paid Order (current_debt 0). Fine 50.
-                                            // effectiveDebt = 0 - 50 = -50.
-                                            // Display: `-(-50)` = `+50`?
-                                            // Or is the column "Debt"?
-
-                                            // Start simple.
-                                            // If critical: Display -(debt - fines).
-                                            // If not critical: Display (remainder - fines).
-                                            // Example Paid: Remainder 0. Fine 50. Result -50.
+                                            // This column now strictly reflects the Order balance, excluding fines.
 
                                             if (order.is_critical_debt) {
-                                                const adjusted = order.current_debt - unpaidFines;
-                                                // If adjusted is negative (credit), removing the minus sign makes it positive.
-                                                // We want to show "-50" (Debt) or "+50" (Credit)?
-                                                // If adjusted is -50 (Credit), display should probably be green?
+                                                const adjusted = order.current_debt;
                                                 return `-${adjusted.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
                                             } else {
-                                                const val = order.remainder_amount - unpaidFines;
-                                                // If val is negative (e.g. 0 - 50 = -50), it shows "-50.00".
+                                                const val = order.remainder_amount;
                                                 return val.toLocaleString(undefined, { minimumFractionDigits: 2 });
                                             }
                                         })()}
