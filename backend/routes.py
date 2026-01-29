@@ -247,18 +247,24 @@ def get_financial_stats(session: Session = Depends(get_session)):
     try:
         total_received = session.exec(select(func.sum(Payment.amount))).one()
         total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
+        total_deductions = session.exec(select(func.sum(Deduction.amount)).where(Deduction.is_paid == False)).one()
         
         # one() on sum can return None if table is empty
         if total_received is None: total_received = 0.0
         if total_allocated is None: total_allocated = 0.0
+        if total_deductions is None: total_deductions = 0.0
         
-        unallocated = total_received - total_allocated
+        # Unallocated funds = (Received - Allocated) + (User Debts/Deductions)
+        # Deductions act as "returned funds" to the customer pool
+        unallocated = (total_received - total_allocated) + total_deductions
         
         return {
             "total_received": total_received,
             "total_allocated": total_allocated,
-            "unallocated": unallocated
+            "unallocated": unallocated,
+            "total_deductions": total_deductions
         }
+
     except Exception as e:
         print(f"Error calculating stats: {e}")
         return {

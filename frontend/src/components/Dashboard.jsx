@@ -92,9 +92,12 @@ const Dashboard = () => {
                     }
                 });
 
-                // Add fines to debt and subtract from balance
-                totalDebt -= totalDeductions;
-                // totalBalance -= totalDeductions; // Optional: depending on if "Balance" is gross or net. Let's adjust it to net.
+                // Do not subtract deductions from Debt. Debt is what Customer owes User.
+                // Deductions are what User owes Customer, and should be added to Unallocated Funds (handled in Backend)
+
+                // totalBalance -= totalDeductions; // User might want to see Net Balance? 
+                // For now, let's keep Debt strictly as "Unpaid Work".
+
 
                 setStats({
                     unpaidAdvances: unpaidAdvances.toLocaleString(),
