@@ -1,3 +1,7 @@
+import React, { useState, useEffect } from 'react';
+import { updateOrder, deleteOrder, getDeductions, createDeduction, deleteDeduction } from '../api';
+import FileManager from './FileManager';
+
 // Editable Date Component
 const EditableDate = ({ value, onSave, className, emptyText = "--.--.--" }) => {
     const [isEditing, setIsEditing] = useState(false);
