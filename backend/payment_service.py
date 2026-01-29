@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from sqlmodel import Session, select
 from models import Order
 from payments import Payment, PaymentAllocation
