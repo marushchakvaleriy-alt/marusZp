@@ -203,19 +203,19 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
     return (
         <div id="list-page">
-            <div className="flex justify-between items-end mb-8">
+            <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
                 <h1 className="text-2xl font-black text-slate-800 italic uppercase">Реєстр замовлень</h1>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-4">
                     <button
                         onClick={() => setIsModalOpen(true)}
-                        className="bg-blue-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition flex items-center gap-2"
+                        className="bg-blue-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition flex items-center justify-center gap-2"
                     >
                         <span className="text-xl">+</span> Нове замовлення
                     </button>
 
                     <button
                         onClick={() => setIsPaymentModalOpen(true)}
-                        className="bg-green-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-green-200 hover:bg-green-700 transition flex items-center gap-2"
+                        className="bg-green-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-green-200 hover:bg-green-700 transition flex items-center justify-center gap-2"
                     >
                         <span className="text-xl">💵</span> Додати платіж
                     </button>
@@ -575,7 +575,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     })}
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 
