@@ -72,7 +72,8 @@ def update_order(order_id: int, order_update: OrderUpdate, session: Session = De
         # Check if new ID exists
         existing = session.get(Order, new_id)
         if existing:
-            raise HTTPException(status_code=400, detail=f"ID {new_id} вже зайнятий")
+            status_text = " (В АРХІВІ)" if (existing.date_advance_paid and existing.date_installation and existing.date_final_paid) else ""
+            raise HTTPException(status_code=400, detail=f"ID {new_id} вже зайнятий замовленням '{existing.name}'{status_text}")
         
         # We need to use raw SQL to update PK and cascade to deductions
         # First update deductions to point to new ID (we do this in transaction)
@@ -115,6 +116,11 @@ def delete_order(order_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Order not found")
     
     order_name = db_order.name # Save name for log
+    
+    # Manually delete orphans just in case
+    from sqlalchemy import text
+    session.exec(text(f"DELETE FROM deduction WHERE order_id = {order_id}"))
+
     session.delete(db_order)
     session.commit()
     log_activity(session, "DELETE_ORDER", f"Видалено замовлення #{order_id} '{order_name}'")
