@@ -93,16 +93,21 @@ const Dashboard = ({ refreshTrigger }) => {
                         .reduce((sum, d) => sum + d.amount, 0);
 
                     // Separate positive debts (customer owes) and negative debts (technologist owes)
+                    // Calculate for ALL orders to ensure credits (fines) are counted even if order is 'paid'
+                    let adjustedDebt;
                     if (order.is_critical_debt) {
-                        const adjustedDebt = order.current_debt - orderFines;
+                        adjustedDebt = order.current_debt - orderFines;
+                    } else {
+                        // If not critical (e.g. paid), check remainder or assume 0 debt but check fines
+                        adjustedDebt = order.remainder_amount - orderFines;
+                    }
 
-                        if (adjustedDebt > 0) {
-                            // Positive debt: customer owes technologist
-                            positiveDebt += adjustedDebt;
-                        } else if (adjustedDebt < 0) {
-                            // Negative debt: technologist owes customer (fines exceed work debt)
-                            negativeDebt += Math.abs(adjustedDebt);
-                        }
+                    if (adjustedDebt > 0) {
+                        // Positive debt: customer owes technologist
+                        positiveDebt += adjustedDebt;
+                    } else if (adjustedDebt < 0) {
+                        // Negative debt: technologist owes customer (fines exceed work debt)
+                        negativeDebt += Math.abs(adjustedDebt);
                     }
                 });
 
