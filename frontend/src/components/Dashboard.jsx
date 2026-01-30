@@ -41,7 +41,7 @@ const StatCard = ({ title, value, type = 'default', showCurrency = true }) => {
     );
 };
 
-const Dashboard = () => {
+const Dashboard = ({ refreshTrigger }) => {
     const [stats, setStats] = useState({
         unpaidAdvances: "0",
         completedOrders: "0",
@@ -61,7 +61,8 @@ const Dashboard = () => {
 
                 let unpaidAdvances = 0;
                 let completedCount = 0;
-                let totalDebt = 0;
+                let positiveDebt = 0; // Customer owes technologist
+                let negativeDebt = 0; // Technologist owes customer (fines)
                 let totalBalance = 0;
                 let totalDeductions = 0;
 
@@ -86,39 +87,52 @@ const Dashboard = () => {
                         unpaidAdvances += order.advance_remaining;
                     }
 
-                    // Total debt = all critical debts
+                    // Calculate unpaid fines for this order
+                    const orderUnpaidFines = deductions
+                        .filter(d => d.order_id === order.id && !d.is_paid)
+                        .reduce((sum, d) => sum + d.amount, 0);
+
+                    // Separate positive debts (customer owes) and negative debts (technologist owes)
                     if (order.is_critical_debt) {
-                        totalDebt += order.current_debt;
+                        const adjustedDebt = order.current_debt - orderUnpaidFines;
+
+                        if (adjustedDebt > 0) {
+                            // Positive debt: customer owes technologist
+                            positiveDebt += adjustedDebt;
+                        } else if (adjustedDebt < 0) {
+                            // Negative debt: technologist owes customer (fines exceed work debt)
+                            negativeDebt += Math.abs(adjustedDebt);
+                        }
                     }
                 });
 
-                // Do not subtract deductions from Debt. Debt is what Customer owes User.
-                // Deductions are what User owes Customer, and should be added to Unallocated Funds (handled in Backend)
+                // Compensate positive and negative debts
+                // Net debt = positive debt minus negative debt (but not below 0)
+                const netDebt = Math.max(0, positiveDebt - negativeDebt);
 
-                // totalBalance -= totalDeductions; // User might want to see Net Balance? 
-                // For now, let's keep Debt strictly as "Unpaid Work".
-
+                // Customer balance = excess of negative debt after compensation
+                const customerBalance = Math.max(0, negativeDebt - positiveDebt);
 
                 setStats({
-                    unpaidAdvances: unpaidAdvances.toLocaleString(),
-                    completedOrders: completedCount.toString(),
-                    totalDebt: totalDebt.toLocaleString(),
+                    totalOrders: orders.length.toLocaleString(),
+                    completedOrders: completedCount.toLocaleString(),
                     totalBalance: totalBalance.toLocaleString(),
-                    unallocatedFunds: financialStats.unallocated.toLocaleString()
+                    totalDebt: netDebt.toLocaleString(),
+                    totalDeductions: totalDeductions.toLocaleString(),
+                    unpaidAdvances: unpaidAdvances.toLocaleString(),
+                    customerBalance: customerBalance.toLocaleString(),
+                    unallocatedFunds: (financialStats.unallocated + customerBalance).toLocaleString()
                 });
             } catch (error) {
                 console.error("Failed to fetch stats:", error);
             }
         };
         calculateStats();
-    }, []);
+    }, [refreshTrigger]);
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-10">
-            <StatCard title="Неоплачені аванси" value={stats.unpaidAdvances} type="blue" />
-            <StatCard title="Закриті замовлення" value={stats.completedOrders} showCurrency={false} />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
             <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
-            <StatCard title="Загальний баланс" value={stats.totalBalance} />
             <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
         </div>
     );

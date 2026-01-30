@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 from database import get_session
-from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead
+from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead
 from payments import Payment, PaymentAllocation, PaymentRead
 from payment_service import PaymentDistributionService
 from pydantic import BaseModel
@@ -59,6 +59,10 @@ def update_order(order_id: int, order_update: OrderUpdate, session: Session = De
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
     
+    # Track if dates changed
+    old_date_to_work = db_order.date_to_work
+    old_date_installation = db_order.date_installation
+    
     order_data = order_update.dict(exclude_unset=True)
     for key, value in order_data.items():
         setattr(db_order, key, value)
@@ -66,6 +70,15 @@ def update_order(order_id: int, order_update: OrderUpdate, session: Session = De
     session.add(db_order)
     session.commit()
     session.refresh(db_order)
+    
+    # If work dates changed, trigger redistribution
+    dates_changed = (
+        db_order.date_to_work != old_date_to_work or 
+        db_order.date_installation != old_date_installation
+    )
+    if dates_changed:
+        PaymentDistributionService.distribute_all_unallocated(session)
+    
     return OrderRead.from_order(db_order)
 
 @router.delete("/orders/{order_id}")
@@ -94,24 +107,23 @@ def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_s
     session.commit()
     session.refresh(payment)
     
-    # Розподілити платіж
-    allocations, remaining = PaymentDistributionService.distribute_payment(
-        payment_data.amount,
-        session,
-        manual_order_id=payment_data.manual_order_id
-    )
+    # Розподілити ВСІ доступні кошти (включаючи старі залишки)
+    allocations = PaymentDistributionService.distribute_all_unallocated(session)
     
-    # Зберегти allocations
-    for alloc in allocations:
-        allocation = PaymentAllocation(
-            payment_id=payment.id,
-            order_id=alloc["order_id"],
-            stage=alloc["stage"],
-            amount=alloc["amount"]
-        )
-        session.add(allocation)
+    # Calculate remaining specifically for THIS payment for response (just for UI)
+    existing_allocs = session.exec(
+        select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
+    ).all()
+    used = sum(a.amount for a in existing_allocs)
+    remaining = payment.amount - used
     
-    session.commit()
+    log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
+    return {
+        "payment_id": payment.id,
+        "allocations": allocations, # This might return allocations from OTHER payments too, but for UI feedback it shows "what happened now"
+        "remaining_amount": remaining,
+        "message": f"Платіж розподілено. Залишок: {remaining:.2f} грн" if remaining > 0 else "Платіж повністю розподілено"
+    }
     
     
     log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
@@ -146,6 +158,28 @@ def get_payment_allocations(payment_id: int, session: Session = Depends(get_sess
         })
     
     return result
+
+@router.post("/payments/redistribute")
+def redistribute_payments(session: Session = Depends(get_session)):
+    """Примусово перерозподілити всі наявні платежі"""
+    allocations = PaymentDistributionService.distribute_all_unallocated(session)
+    
+    # Calculate total unallocated
+    payments = session.exec(select(Payment)).all()
+    total_received = sum(p.amount for p in payments)
+    
+    all_allocations = session.exec(select(PaymentAllocation)).all()
+    total_allocated = sum(a.amount for a in all_allocations)
+    
+    unallocated = total_received - total_allocated
+    
+    log_activity(session, "REDISTRIBUTE", f"Перерозподілено {len(allocations)} транзакцій. Залишок: {unallocated:.2f} грн")
+    
+    return {
+        "allocations_made": len(allocations),
+        "unallocated_remaining": unallocated,
+        "message": f"Розподіл завершено. Нерозподілено: {unallocated:.2f} грн"
+    }
 
 # File Management
 # File Link Management
@@ -208,7 +242,8 @@ def create_deduction(deduction_data: DeductionCreate, session: Session = Depends
     session.commit()
     session.refresh(deduction)
     
-    log_activity(session, "ADD_DEDUCTION", f"Додано штраф/провину {deduction.amount} грн для замовлення '{order.name}'")
+    order = session.get(Order, deduction.order_id)
+    log_activity(session, "ADD_DEDUCTION", f"Додано штраф {deduction.amount} грн для замовлення '{order.name}'")
     return DeductionRead.from_deduction(deduction, order.name)
 
 @router.get("/deductions/")
@@ -227,6 +262,26 @@ def get_deductions(order_id: int = None, session: Session = Depends(get_session)
     
     return result
 
+@router.patch("/deductions/{deduction_id}")
+def update_deduction(deduction_id: int, deduction_update: "DeductionUpdate", session: Session = Depends(get_session)):
+    from models import DeductionUpdate
+    
+    deduction = session.get(Deduction, deduction_id)
+    if not deduction:
+        raise HTTPException(status_code=404, detail="Deduction not found")
+    
+    update_data = deduction_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(deduction, key, value)
+    
+    session.add(deduction)
+    session.commit()
+    session.refresh(deduction)
+    
+    order = session.get(Order, deduction.order_id)
+    log_activity(session, "UPDATE_DEDUCTION", f"Оновлено штраф #{deduction_id}")
+    return DeductionRead.from_deduction(deduction, order.name if order else "Unknown")
+
 @router.delete("/deductions/{deduction_id}")
 def delete_deduction(deduction_id: int, session: Session = Depends(get_session)):
     deduction = session.get(Deduction, deduction_id)
@@ -236,6 +291,7 @@ def delete_deduction(deduction_id: int, session: Session = Depends(get_session))
     deduction_amount = deduction.amount # Save for log
     session.delete(deduction)
     session.commit()
+    
     log_activity(session, "DELETE_DEDUCTION", f"Видалено штраф #{deduction_id} ({deduction_amount} грн)")
     return {"message": "Deduction deleted successfully"}
 
@@ -254,9 +310,9 @@ def get_financial_stats(session: Session = Depends(get_session)):
         if total_allocated is None: total_allocated = 0.0
         if total_deductions is None: total_deductions = 0.0
         
-        # Unallocated funds = (Received - Allocated) + (User Debts/Deductions)
-        # Deductions act as "returned funds" to the customer pool
-        unallocated = (total_received - total_allocated) + total_deductions
+        # Unallocated funds = (Real payments received) - (Payments allocated to work)
+        # Fines don't appear here - they only reduce debt on specific orders
+        unallocated = total_received - total_allocated
         
         return {
             "total_received": total_received,

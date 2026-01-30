@@ -152,6 +152,10 @@ class DeductionRead(BaseModel):
             date_paid=deduction.date_paid
         )
 
+class DeductionUpdate(BaseModel):
+    is_paid: Optional[bool] = None
+    date_paid: Optional[date] = None
+
 # Activity Log Model
 class ActivityLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

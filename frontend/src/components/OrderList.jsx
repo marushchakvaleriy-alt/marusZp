@@ -161,7 +161,7 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
 };
 
 
-const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
+const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [orders, setOrders] = useState([]);
     const [deductions, setDeductions] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -182,7 +182,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
 
     useEffect(() => {
         fetchOrders();
-    }, []);
+    }, [refreshTrigger]);
 
     const handleCreate = async (newOrder) => {
         try {
@@ -204,7 +204,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
     return (
         <div id="list-page">
             <div className="flex justify-between items-end mb-8">
-                <h1 className="text-2xl font-black text-slate-800 italic uppercase">Реєстр замовлень технолога</h1>
+                <h1 className="text-2xl font-black text-slate-800 italic uppercase">Реєстр замовлень</h1>
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => setIsModalOpen(true)}
@@ -241,9 +241,10 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
                             <th className="p-4 border-b font-bold">Виріб / Об'єкт</th>
                             <th className="p-4 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
                             <th className="p-4 border-b text-right font-bold">Ціна (100%)</th>
-                            <th className="p-4 border-b text-right font-bold text-blue-500">ПГ (5%)</th>
+                            <th className="p-4 border-b text-right font-bold text-blue-500">ЗП (5%)</th>
                             <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/50">Етап I: Конструктив (50%)</th>
                             <th className="p-4 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/30">Етап II: Монтаж (50%)</th>
+                            <th className="p-4 border-b text-center font-bold text-orange-600 bg-orange-50/30">Штрафи</th>
                             <th className="p-4 pr-6 border-b text-right font-bold">Борг/Залишок</th>
                         </tr>
                     </thead>
@@ -334,12 +335,40 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
                                                                 {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
                                                             </span>
                                                         ) : order.date_to_work ? (
-                                                            <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                БОРГ
-                                                                <div className="text-xs text-slate-600 mt-0.5">
-                                                                    {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
-                                                                </div>
-                                                            </div>
+                                                            (() => {
+                                                                // Calculate fines applied to this stage
+                                                                const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
+                                                                const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+
+                                                                // Assume fines go to advance stage first (same logic as payment distribution)
+                                                                const fineToAdvance = Math.min(totalFines, order.advance_amount);
+                                                                const realPayment = order.advance_paid_amount;
+
+                                                                return (
+                                                                    <div className="text-[10px] font-bold text-red-600 uppercase">
+                                                                        БОРГ
+                                                                        <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
+                                                                            {realPayment > 0 && (
+                                                                                <>
+                                                                                    <span className="text-slate-700">{realPayment.toLocaleString()}</span>
+                                                                                    {fineToAdvance > 0 && <span className="text-slate-400">+</span>}
+                                                                                </>
+                                                                            )}
+                                                                            {fineToAdvance > 0 && (
+                                                                                <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                    {fineToAdvance.toLocaleString()} ШТРАФ
+                                                                                </span>
+                                                                            )}
+                                                                            {(realPayment > 0 || fineToAdvance > 0) && (
+                                                                                <span className="text-slate-400">/</span>
+                                                                            )}
+                                                                            <span className="text-slate-600">
+                                                                                {(order.advance_amount - realPayment - fineToAdvance).toLocaleString()} ₴
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()
                                                         ) : (
                                                             <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
                                                                 ОЧІКУЄ
@@ -362,12 +391,41 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
                                                                 {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
                                                             </span>
                                                         ) : order.date_installation ? (
-                                                            <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                БОРГ
-                                                                <div className="text-xs text-slate-600 mt-0.5">
-                                                                    {order.final_paid_amount.toLocaleString()} / {stageAmount.toLocaleString()} ₴
-                                                                </div>
-                                                            </div>
+                                                            (() => {
+                                                                // Calculate fines applied to this stage
+                                                                const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
+                                                                const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+
+                                                                // Fines go to advance first, then final
+                                                                const fineToAdvance = Math.min(totalFines, order.advance_amount);
+                                                                const fineToFinal = Math.max(0, Math.min(totalFines - fineToAdvance, stageAmount));
+                                                                const realPayment = order.final_paid_amount;
+
+                                                                return (
+                                                                    <div className="text-[10px] font-bold text-red-600 uppercase">
+                                                                        БОРГ
+                                                                        <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
+                                                                            {realPayment > 0 && (
+                                                                                <>
+                                                                                    <span className="text-slate-700">{realPayment.toLocaleString()}</span>
+                                                                                    {fineToFinal > 0 && <span className="text-slate-400">+</span>}
+                                                                                </>
+                                                                            )}
+                                                                            {fineToFinal > 0 && (
+                                                                                <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                    {fineToFinal.toLocaleString()} ШТРАФ
+                                                                                </span>
+                                                                            )}
+                                                                            {(realPayment > 0 || fineToFinal > 0) && (
+                                                                                <span className="text-slate-400">/</span>
+                                                                            )}
+                                                                            <span className="text-slate-600">
+                                                                                {(stageAmount - realPayment - fineToFinal).toLocaleString()} ₴
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()
                                                         ) : (
                                                             <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
                                                                 ОЧІКУЄ
@@ -379,17 +437,40 @@ const OrderList = ({ onSelectOrder, onPaymentAdded }) => {
                                         );
                                     })()}
 
+                                    {/* Fines column */}
+                                    <td className="p-4 text-center bg-orange-50/20">
+                                        {(() => {
+                                            const unpaidFines = deductions
+                                                .filter(d => d.order_id === order.id && !d.is_paid)
+                                                .reduce((sum, d) => sum + d.amount, 0);
+
+                                            if (unpaidFines > 0) {
+                                                return (
+                                                    <span className="text-sm font-black italic text-orange-600">
+                                                        {unpaidFines.toLocaleString()} ₴
+                                                    </span>
+                                                );
+                                            } else {
+                                                return <span className="text-xs text-slate-400">—</span>;
+                                            }
+                                        })()}
+                                    </td>
+
                                     <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
                                         {(() => {
-                                            // Determine base amount: if critical debt, use current_debt. Otherwise use remainder.
-                                            // This column now strictly reflects the Order balance, excluding fines.
+                                            const unpaidFines = deductions
+                                                .filter(d => d.order_id === order.id && !d.is_paid)
+                                                .reduce((sum, d) => sum + d.amount, 0);
 
                                             if (order.is_critical_debt) {
-                                                const adjusted = order.current_debt;
-                                                return `-${adjusted.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                                                const adjustedDebt = order.current_debt - unpaidFines;
+                                                // Don't show negative debt - show 0 if fines cover all debt
+                                                const displayDebt = Math.max(0, adjustedDebt);
+                                                return displayDebt.toLocaleString(undefined, { minimumFractionDigits: 2 });
                                             } else {
-                                                const val = order.remainder_amount;
-                                                return val.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                                                const val = order.remainder_amount - unpaidFines;
+                                                const displayVal = Math.max(0, val);
+                                                return displayVal.toLocaleString(undefined, { minimumFractionDigits: 2 });
                                             }
                                         })()}
                                     </td>

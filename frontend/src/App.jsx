@@ -51,34 +51,36 @@ function App() {
             <div className="max-w-[1600px] mx-auto">
                 {currentView === 'list' && (
                     <>
-                        <Dashboard key={statsRefreshKey} />
-                        <div className="mb-6 flex justify-end gap-3 flex-wrap">
-                            <button
-                                onClick={handleResetDatabase}
-                                className="px-6 py-2 bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 hover:bg-black transition flex items-center gap-2"
-                            >
-                                <i className="fas fa-trash-alt"></i> Очистити все
-                            </button>
-                            <button
-                                onClick={() => setCurrentView('activity')}
-                                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
-                            >
-                                <i className="fas fa-list-ul"></i> Історія дій
-                            </button>
-                            <button
-                                onClick={() => setCurrentView('deductions')}
-                                className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
-                            >
-                                <i className="fas fa-exclamation-triangle"></i> Мої провини
-                            </button>
-                            <button
-                                onClick={() => setCurrentView('payments')}
-                                className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
-                            >
-                                <i className="fas fa-history"></i> Історія платежів
-                            </button>
-                        </div>
-                        <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} key={statsRefreshKey} />
+                        <>
+                            <Dashboard refreshTrigger={statsRefreshKey} />
+                            <div className="mb-6 flex justify-end gap-3 flex-wrap">
+                                <button
+                                    onClick={handleResetDatabase}
+                                    className="px-6 py-2 bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 hover:bg-black transition flex items-center gap-2"
+                                >
+                                    <i className="fas fa-trash-alt"></i> Очистити все
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('activity')}
+                                    className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
+                                >
+                                    <i className="fas fa-list-ul"></i> Історія дій
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('deductions')}
+                                    className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
+                                >
+                                    <i className="fas fa-exclamation-triangle"></i> Мої провини
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('payments')}
+                                    className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
+                                >
+                                    <i className="fas fa-history"></i> Історія платежів
+                                </button>
+                            </div>
+                            <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} refreshTrigger={statsRefreshKey} />
+                        </>
                     </>
                 )}
 
