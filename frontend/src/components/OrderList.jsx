@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { getOrders, createOrder, getDeductions } from '../api';
+import { getOrders, createOrder, getDeductions, updateOrder } from '../api';
 import PaymentModal from './PaymentModal';
 
 
 const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
     const [formData, setFormData] = useState({
+        id: '',
         name: '',
         price: '',
         date_received: '',
@@ -48,13 +49,14 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         onSave({
+            id: formData.id || undefined,
             name: formData.name,
             price: parseFloat(formData.price),
             date_received: formData.date_received || null,
             product_types: JSON.stringify(formData.product_types),
             date_to_work: null
         });
-        setFormData({ name: '', price: '', date_received: '', product_types: [] });
+        setFormData({ id: '', name: '', price: '', date_received: '', product_types: [] });
         setCustomType('');
     };
 
@@ -63,6 +65,18 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
             <div className="bg-white rounded-3xl p-8 w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
                 <h2 className="text-xl font-black text-slate-800 uppercase italic mb-6">Нове замовлення</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Номер замовлення (ID)</label>
+                        <input
+                            type="number"
+                            placeholder="Авто"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                            value={formData.id || ''}
+                            onChange={e => setFormData({ ...formData, id: e.target.value ? parseInt(e.target.value) : '' })}
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1 ml-1">Залиште пустим для авто-нумерації</p>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Назва об'єкту</label>
                         <input
@@ -203,6 +217,23 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
         return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
     };
 
+    const handleEditId = async (e, order) => {
+        e.stopPropagation(); // Stop opening order details
+        const newIdStr = prompt(`Введіть новий ID для замовлення "${order.name}" (поточний: ${order.id}):`, order.id);
+        if (!newIdStr) return;
+
+        const newId = parseInt(newIdStr);
+        if (isNaN(newId) || newId === order.id) return;
+
+        try {
+            await updateOrder(order.id, { id: newId });
+            fetchOrders();
+        } catch (error) {
+            console.error("Failed to update ID:", error);
+            alert("Помилка при зміні ID: " + (error.response?.data?.detail || error.message));
+        }
+    };
+
     // Filter orders by completion status and search query
     const filteredOrders = orders.filter(order => {
         // Determine if order is completed (archived)
@@ -218,7 +249,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             (order.product_types && order.product_types.toLowerCase().includes(searchQuery.toLowerCase()));
 
         return matchesViewMode && matchesSearch;
-    });
+    }).sort((a, b) => a.id - b.id); // Sort by ID ascending
 
     return (
         <div id="list-page">
@@ -313,7 +344,18 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                             return (
                                 <tr key={order.id} className="hover:bg-blue-50/20 transition cursor-pointer group" onClick={() => onSelectOrder(order)}>
-                                    <td className="p-4 pl-6 text-slate-300 font-bold italic text-sm">#{order.id}</td>
+                                    <td className="p-4 pl-6 text-slate-300 font-bold italic text-sm group-hover:text-blue-500 transition-colors">
+                                        <div className="flex items-center gap-2">
+                                            #{order.id}
+                                            <button
+                                                onClick={(e) => handleEditId(e, order)}
+                                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 transition"
+                                                title="Змінити ID"
+                                            >
+                                                ✎
+                                            </button>
+                                        </div>
+                                    </td>
 
                                     <td className="p-4">
                                         <div className="font-black text-slate-800 italic text-base">{order.name}</div>
@@ -559,7 +601,15 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                 {/* Header: ID + Name */}
                                 <div className="flex items-start justify-between mb-3">
                                     <div className="flex-1">
-                                        <div className="text-slate-400 text-xs font-bold mb-1">#{order.id}</div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <div className="text-slate-400 text-xs font-bold">#{order.id}</div>
+                                            <button
+                                                onClick={(e) => handleEditId(e, order)}
+                                                className="text-slate-300 hover:text-blue-600 text-xs px-2"
+                                            >
+                                                ✎
+                                            </button>
+                                        </div>
                                         <div className="font-bold text-slate-800 text-sm">{order.name}</div>
                                         <div className="flex gap-1 mt-1 flex-wrap">
                                             {order.product_types && JSON.parse(order.product_types).map((type, idx) => (

@@ -63,9 +63,36 @@ def update_order(order_id: int, order_update: OrderUpdate, session: Session = De
     old_date_to_work = db_order.date_to_work
     old_date_installation = db_order.date_installation
     
+    
     order_data = order_update.dict(exclude_unset=True)
+    
+    # Check if ID change is requested
+    new_id = order_data.get("id")
+    if new_id is not None and new_id != order_id:
+        # Check if new ID exists
+        existing = session.get(Order, new_id)
+        if existing:
+            raise HTTPException(status_code=400, detail=f"ID {new_id} вже зайнятий")
+        
+        # We need to use raw SQL to update PK and cascade to deductions
+        # First update deductions to point to new ID (we do this in transaction)
+        # Actually, standard SQL update on parent with CASCADE is best, but we simulate it:
+        
+        # 1. Update Order ID (SQLAlchemy doesn't like PK change on object)
+        from sqlalchemy import text
+        session.exec(text(f"UPDATE deduction SET order_id = {new_id} WHERE order_id = {order_id}"))
+        session.exec(text(f"UPDATE \"order\" SET id = {new_id} WHERE id = {order_id}")) # Quote table name 'order'
+        session.commit()
+        
+        # Re-fetch new order
+        db_order = session.get(Order, new_id)
+        order_id = new_id # Update local var
+        # Remove id from order_data to avoid re-update error logic
+        del order_data["id"] 
+
     for key, value in order_data.items():
-        setattr(db_order, key, value)
+        if key != "id": # Skip ID as handled above
+            setattr(db_order, key, value)
     
     session.add(db_order)
     session.commit()

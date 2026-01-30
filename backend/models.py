@@ -42,6 +42,7 @@ class OrderUpdate(SQLModel):
     date_final_paid: Optional[date] = None
     advance_paid_amount: Optional[float] = None
     final_paid_amount: Optional[float] = None
+    id: Optional[int] = None # Allow updating ID manually
 
 class OrderRead(OrderBase):
     id: int
