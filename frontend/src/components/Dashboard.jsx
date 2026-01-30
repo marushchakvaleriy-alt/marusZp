@@ -87,14 +87,14 @@ const Dashboard = ({ refreshTrigger }) => {
                         unpaidAdvances += order.advance_remaining;
                     }
 
-                    // Calculate unpaid fines for this order
-                    const orderUnpaidFines = deductions
-                        .filter(d => d.order_id === order.id && !d.is_paid)
+                    // Calculate fines for this order (ALL fines reduce debt)
+                    const orderFines = deductions
+                        .filter(d => d.order_id === order.id)
                         .reduce((sum, d) => sum + d.amount, 0);
 
                     // Separate positive debts (customer owes) and negative debts (technologist owes)
                     if (order.is_critical_debt) {
-                        const adjustedDebt = order.current_debt - orderUnpaidFines;
+                        const adjustedDebt = order.current_debt - orderFines;
 
                         if (adjustedDebt > 0) {
                             // Positive debt: customer owes technologist

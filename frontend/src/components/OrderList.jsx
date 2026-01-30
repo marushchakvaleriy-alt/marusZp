@@ -396,7 +396,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                     {(() => {
                                         // Calculate unpaid fines for this order
                                         const unpaidFines = deductions
-                                            .filter(d => d.order_id === order.id && !d.is_paid)
+                                            .filter(d => d.order_id === order.id)
                                             .reduce((sum, d) => sum + d.amount, 0);
 
                                         // Calculate adjusted debt
@@ -539,7 +539,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                     <td className="p-4 text-center bg-orange-50/20">
                                         {(() => {
                                             const unpaidFines = deductions
-                                                .filter(d => d.order_id === order.id && !d.is_paid)
+                                                .filter(d => d.order_id === order.id)
                                                 .reduce((sum, d) => sum + d.amount, 0);
 
                                             if (unpaidFines > 0) {
@@ -557,7 +557,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                     <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
                                         {(() => {
                                             const unpaidFines = deductions
-                                                .filter(d => d.order_id === order.id && !d.is_paid)
+                                                .filter(d => d.order_id === order.id)
                                                 .reduce((sum, d) => sum + d.amount, 0);
 
                                             let val;
@@ -590,7 +590,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         const isPaidStage1 = !!order.date_advance_paid;
                         const isPaidStage2 = !!order.date_final_paid;
                         const unpaidFines = deductions
-                            .filter(d => d.order_id === order.id && !d.is_paid)
+                            .filter(d => d.order_id === order.id)
                             .reduce((sum, d) => sum + d.amount, 0);
                         const adjustedDebt = order.is_critical_debt
                             ? order.current_debt - unpaidFines
