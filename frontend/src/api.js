@@ -50,6 +50,11 @@ export const getPaymentAllocations = async (paymentId) => {
     return response.data;
 };
 
+export const deletePayment = async (id) => {
+    const response = await api.delete(`/payments/${id}`);
+    return response.data;
+};
+
 export const getFiles = async (orderId) => {
     const response = await api.get(`/orders/${orderId}/files`);
     return response.data;

@@ -560,16 +560,20 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 .filter(d => d.order_id === order.id && !d.is_paid)
                                                 .reduce((sum, d) => sum + d.amount, 0);
 
+                                            let val;
                                             if (order.is_critical_debt) {
-                                                const adjustedDebt = order.current_debt - unpaidFines;
-                                                // Don't show negative debt - show 0 if fines cover all debt
-                                                const displayDebt = Math.max(0, adjustedDebt);
-                                                return displayDebt.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                                                val = order.current_debt - unpaidFines;
                                             } else {
-                                                const val = order.remainder_amount - unpaidFines;
-                                                const displayVal = Math.max(0, val);
-                                                return displayVal.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                                                val = order.remainder_amount - unpaidFines;
                                             }
+
+                                            // Allow negative values (overpayment/fines > remainder)
+                                            const isNegative = val < -0.01;
+                                            return (
+                                                <span className={isNegative ? 'text-red-600' : ''}>
+                                                    {val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {isNegative && '₴'}
+                                                </span>
+                                            );
                                         })()}
                                     </td>
                                 </tr>
@@ -589,8 +593,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                             .filter(d => d.order_id === order.id && !d.is_paid)
                             .reduce((sum, d) => sum + d.amount, 0);
                         const adjustedDebt = order.is_critical_debt
-                            ? Math.max(0, order.current_debt - unpaidFines)
-                            : Math.max(0, order.remainder_amount - unpaidFines);
+                            ? order.current_debt - unpaidFines
+                            : order.remainder_amount - unpaidFines;
 
                         return (
                             <div
@@ -671,7 +675,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                             <span className="text-orange-500 text-[10px] ml-1">штрафи</span>
                                         </div>
                                     )}
-                                    <div className={`text-sm font-black ml-auto ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                    <div className={`text-sm font-black ml-auto ${order.is_critical_debt || adjustedDebt < -0.01 ? 'text-red-500' : 'text-slate-300'}`}>
                                         {adjustedDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
                                     </div>
                                 </div>

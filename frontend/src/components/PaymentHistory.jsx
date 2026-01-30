@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPayments, getPaymentAllocations } from '../api';
+import { getPayments, getPaymentAllocations, deletePayment } from '../api';
 
 const PaymentHistory = () => {
     const [payments, setPayments] = useState([]);
@@ -29,6 +29,34 @@ const PaymentHistory = () => {
             setAllocations(data);
         } catch (error) {
             console.error('Failed to load allocations:', error);
+        }
+    };
+
+    const handleDeletePayment = async (e, payment) => {
+        e.stopPropagation();
+
+        const password = prompt('Введіть пароль для видалення платежу:');
+        if (password !== 'Gjksyrf') {
+            alert('Невірний пароль!');
+            return;
+        }
+
+        if (!window.confirm(`Ви впевнені, що хочете видалити платіж на суму ${payment.amount} грн?\n\nУВАГА: Це призведе до перерахунку всіх балансів замовлень! Цю дію неможливо відмінити.`)) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await deletePayment(payment.id);
+            await loadPayments();
+            if (selectedPayment?.id === payment.id) {
+                setSelectedPayment(null);
+                setAllocations([]);
+            }
+        } catch (error) {
+            console.error('Failed to delete payment:', error);
+            alert('Помилка при видаленні платежу');
+            setLoading(false);
         }
     };
 
@@ -67,7 +95,7 @@ const PaymentHistory = () => {
                                 <div
                                     key={payment.id}
                                     onClick={() => handlePaymentClick(payment)}
-                                    className={`p-4 cursor-pointer transition hover:bg-blue-50 ${selectedPayment?.id === payment.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''
+                                    className={`p-4 cursor-pointer transition hover:bg-blue-50 group ${selectedPayment?.id === payment.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''
                                         }`}
                                 >
                                     <div className="flex justify-between items-center">
@@ -82,13 +110,23 @@ const PaymentHistory = () => {
                                                 <p className="text-xs text-slate-500 italic mt-1">{payment.notes}</p>
                                             )}
                                         </div>
-                                        <div className="text-right">
+                                        <div className="flex flex-col items-end gap-2">
                                             <span className={`text-xs font-bold px-3 py-1 rounded-full ${payment.manual_order_id
-                                                    ? 'bg-orange-100 text-orange-700'
-                                                    : 'bg-green-100 text-green-700'
+                                                ? 'bg-orange-100 text-orange-700'
+                                                : 'bg-green-100 text-green-700'
                                                 }`}>
                                                 {payment.manual_order_id ? 'Ручний' : 'Авто'}
                                             </span>
+
+                                            <button
+                                                onClick={(e) => handleDeletePayment(e, payment)}
+                                                className="text-slate-300 hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100"
+                                                title="Видалити платіж"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -134,8 +172,8 @@ const PaymentHistory = () => {
                                                 </p>
                                             </div>
                                             <span className={`text-xs font-bold px-3 py-1 rounded-full ${allocation.payment_type === 'advance'
-                                                    ? 'bg-blue-100 text-blue-700'
-                                                    : 'bg-emerald-100 text-emerald-700'
+                                                ? 'bg-blue-100 text-blue-700'
+                                                : 'bg-emerald-100 text-emerald-700'
                                                 }`}>
                                                 {allocation.payment_type === 'advance' ? 'Аванс' : 'Залишок'}
                                             </span>

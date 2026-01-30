@@ -143,9 +143,20 @@ class PaymentDistributionService:
             
             if remaining_payment <= 0.01:
                 continue
-                
+
+            # Визначаємо цільові замовлення: одне (ручний) чи всі (авто)
+            target_orders = orders
+            if payment.manual_order_id:
+                manual_order = next((o for o in orders if o.id == payment.manual_order_id), None)
+                if manual_order:
+                    target_orders = [manual_order]
+                else:
+                    # Якщо вказане замовлення не знайдено (видалено?), пропускаємо або кидаємо в загальний котел?
+                    # Безпечніше пропустити або логувати. Поки що зробимо fallback на всі.
+                    pass 
+
             # Якщо є залишок, пробуємо його розподілити
-            for order in orders:
+            for order in target_orders:
                 if remaining_payment <= 0.01:
                     break
                     

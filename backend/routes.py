@@ -167,6 +167,41 @@ def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_s
         "message": f"Платіж розподілено. Залишок: {remaining:.2f} грн" if remaining > 0 else "Платіж повністю розподілено"
     }
 
+@router.delete("/payments/{payment_id}")
+def delete_payment(payment_id: int, session: Session = Depends(get_session)):
+    """
+    Видалити платіж і ПОВНІСТЮ перерахувати всі розподіли.
+    Це необхідно для збереження коректності балансів (First-In-First-Out).
+    """
+    payment = session.get(Payment, payment_id)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    amount = payment.amount
+    date_ = payment.date_received
+    
+    session.delete(payment)
+    session.commit()
+    
+    # --- RESET WORLD STRATEGY ---
+    # 1. Clear all allocations
+    from sqlalchemy import text
+    session.exec(text("DELETE FROM paymentallocation"))
+    
+    # 2. Reset order paid amounts and dates
+    # We set them to 0 and NULL.
+    # Note: If there are other sources of payments (e.g. deductions paid via other means?), this might correspond to only payments handled here.
+    # Assuming all "advance/final" payments come through Payment system.
+    session.exec(text("UPDATE \"order\" SET advance_paid_amount = 0, final_paid_amount = 0, date_advance_paid = NULL, date_final_paid = NULL"))
+    
+    session.commit()
+    
+    # 3. Recalculate everything
+    PaymentDistributionService.distribute_all_unallocated(session)
+    
+    log_activity(session, "DELETE_PAYMENT", f"Видалено платіж {amount} грн від {date_} і перераховано баланси")
+    return {"ok": True}
+
 @router.get("/payments/", response_model=List[PaymentRead])
 def get_payments(session: Session = Depends(get_session)):
     """Отримати історію всіх платежів"""
