@@ -234,7 +234,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             />
 
             <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
-                <table className="w-full text-left border-collapse">
+                {/* Desktop Table View */}
+                <table className="hidden md:table w-full text-left border-collapse">
                     <thead>
                         <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50/80">
                             <th className="p-4 pl-6 border-b font-bold">ID</th>
@@ -479,6 +480,100 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         })}
                     </tbody>
                 </table>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden divide-y divide-slate-100">
+                    {orders.map((order) => {
+                        const bonus = order.bonus;
+                        const stageAmount = bonus / 2;
+                        const isPaidStage1 = !!order.date_advance_paid;
+                        const isPaidStage2 = !!order.date_final_paid;
+                        const unpaidFines = deductions
+                            .filter(d => d.order_id === order.id && !d.is_paid)
+                            .reduce((sum, d) => sum + d.amount, 0);
+                        const adjustedDebt = order.is_critical_debt
+                            ? Math.max(0, order.current_debt - unpaidFines)
+                            : Math.max(0, order.remainder_amount - unpaidFines);
+
+                        return (
+                            <div
+                                key={order.id}
+                                className="p-4 hover:bg-blue-50/20 transition cursor-pointer"
+                                onClick={() => onSelectOrder(order)}
+                            >
+                                {/* Header: ID + Name */}
+                                <div className="flex items-start justify-between mb-3">
+                                    <div className="flex-1">
+                                        <div className="text-slate-400 text-xs font-bold mb-1">#{order.id}</div>
+                                        <div className="font-bold text-slate-800 text-sm">{order.name}</div>
+                                        <div className="flex gap-1 mt-1 flex-wrap">
+                                            {order.product_types && JSON.parse(order.product_types).map((type, idx) => (
+                                                <span key={idx} className="bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
+                                                    {type}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] text-slate-400 uppercase mb-0.5">Ціна</div>
+                                        <div className="font-black text-slate-800 text-base">{order.price.toLocaleString()} ₴</div>
+                                        <div className="text-[10px] text-blue-500 font-bold">ЗП: {bonus.toLocaleString()} ₴</div>
+                                    </div>
+                                </div>
+
+                                {/* Date & Status */}
+                                <div className="mb-3 text-xs">
+                                    <div className="flex items-center gap-2 text-purple-600">
+                                        <span className="font-bold uppercase text-[10px]">Прийнято:</span>
+                                        <span className="font-bold">{formatDate(order.date_to_work)}</span>
+                                    </div>
+                                </div>
+
+                                {/* Stages Grid */}
+                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                    {/* Stage I */}
+                                    <div className="bg-slate-50 rounded-lg p-2">
+                                        <div className="text-[9px] text-slate-500 uppercase font-bold mb-1">Етап I</div>
+                                        <div className="text-xs font-black text-slate-700 mb-1">{stageAmount.toLocaleString()} ₴</div>
+                                        {isPaidStage1 ? (
+                                            <div className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">ОПЛАЧЕНО</div>
+                                        ) : order.date_to_work ? (
+                                            <div className="text-[9px] text-red-600 font-bold">БОРГ</div>
+                                        ) : (
+                                            <div className="text-[9px] text-slate-400 font-bold">ОЧІКУЄ</div>
+                                        )}
+                                    </div>
+
+                                    {/* Stage II */}
+                                    <div className="bg-emerald-50/50 rounded-lg p-2">
+                                        <div className="text-[9px] text-emerald-600 uppercase font-bold mb-1">Етап II</div>
+                                        <div className="text-xs font-black text-slate-700 mb-1">{stageAmount.toLocaleString()} ₴</div>
+                                        {isPaidStage2 ? (
+                                            <div className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">ОПЛАЧЕНО</div>
+                                        ) : order.date_installation ? (
+                                            <div className="text-[9px] text-red-600 font-bold">БОРГ</div>
+                                        ) : (
+                                            <div className="text-[9px] text-slate-400 font-bold">ОЧІКУЄ</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Footer: Fines & Debt */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                    {unpaidFines > 0 && (
+                                        <div className="text-xs">
+                                            <span className="text-orange-600 font-black">{unpaidFines.toLocaleString()} ₴</span>
+                                            <span className="text-orange-500 text-[10px] ml-1">штрафи</span>
+                                        </div>
+                                    )}
+                                    <div className={`text-sm font-black ml-auto ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                        {adjustedDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
