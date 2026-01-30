@@ -166,6 +166,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [deductions, setDeductions] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [viewMode, setViewMode] = useState('active'); // 'active' or 'archived'
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchOrders = async () => {
         try {
@@ -201,6 +203,23 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
         return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
     };
 
+    // Filter orders by completion status and search query
+    const filteredOrders = orders.filter(order => {
+        // Determine if order is completed (archived)
+        const isCompleted = order.date_advance_paid && order.date_installation && order.date_final_paid;
+
+        // Filter by view mode
+        const matchesViewMode = viewMode === 'active' ? !isCompleted : isCompleted;
+
+        // Filter by search query
+        const matchesSearch = searchQuery === '' ||
+            order.id.toString().includes(searchQuery) ||
+            order.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (order.product_types && order.product_types.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        return matchesViewMode && matchesSearch;
+    });
+
     return (
         <div id="list-page">
             <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
@@ -220,6 +239,42 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         <span className="text-xl">💵</span> Додати платіж
                     </button>
 
+                </div>
+            </div>
+
+            {/* Archive Toggle and Search */}
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+                {/* View Mode Toggle */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setViewMode('active')}
+                        className={`px-4 py-2 rounded-xl font-bold text-sm transition ${viewMode === 'active'
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                    >
+                        Активні
+                    </button>
+                    <button
+                        onClick={() => setViewMode('archived')}
+                        className={`px-4 py-2 rounded-xl font-bold text-sm transition ${viewMode === 'archived'
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                    >
+                        Архів
+                    </button>
+                </div>
+
+                {/* Search Input */}
+                <div className="flex-1">
+                    <input
+                        type="text"
+                        placeholder="Пошук за ID, назвою або типом..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none transition"
+                    />
                 </div>
             </div>
 
@@ -250,7 +305,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {orders.map((order) => {
+                        {filteredOrders.map((order) => {
                             const bonus = order.bonus;
                             const stageAmount = bonus / 2;
                             const isPaidStage1 = !!order.date_advance_paid;
@@ -483,7 +538,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                 {/* Mobile Card View */}
                 <div className="md:hidden divide-y divide-slate-100">
-                    {orders.map((order) => {
+                    {filteredOrders.map((order) => {
                         const bonus = order.bonus;
                         const stageAmount = bonus / 2;
                         const isPaidStage1 = !!order.date_advance_paid;
