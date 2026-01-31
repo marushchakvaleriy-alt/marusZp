@@ -105,21 +105,28 @@ def get_logs(session: Session = Depends(get_session)):
 
 @router.post("/orders/", response_model=OrderRead)
 async def create_order(order: OrderCreate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
-    # Create DB model from input
-    db_order = Order.from_orm(order)
-    
-    # If not admin, force constructor_id to own id? Or restrict creation?
-    # Assuming only admin creates orders for now, or constructors create their own
-    if current_user.role != 'admin' and not db_order.constructor_id:
-        db_order.constructor_id = current_user.id
+    try:
+        # Create DB model from input
+        db_order = Order.from_orm(order)
         
-    session.add(db_order)
-    session.commit()
-    session.refresh(db_order)
-    
-    # Log activity
-    log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}' (Автор: {current_user.username})")
-    return OrderRead.from_order(db_order)
+        # If not admin, force constructor_id to own id? Or restrict creation?
+        # Assuming only admin creates orders for now, or constructors create their own
+        if current_user.role != 'admin' and not db_order.constructor_id:
+            db_order.constructor_id = current_user.id
+            
+        session.add(db_order)
+        session.commit()
+        session.refresh(db_order)
+        
+        # Log activity
+        log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}' (Автор: {current_user.username})")
+        return OrderRead.from_order(db_order)
+    except Exception as e:
+        session.rollback()
+        print(f"ERROR CREATING ORDER: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Creation Error: {str(e)}")
 
 @router.get("/orders/", response_model=List[OrderRead])
 async def read_orders(

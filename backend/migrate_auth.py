@@ -33,18 +33,26 @@ def migrate():
                 session.commit()
                 logger.info("Added 'constructor_id' column.")
             except Exception as e:
-                logger.error(f"Failed to add column (might use different quoting or DB specific syntax): {e}")
-                # Try without quotes if "order" fails
+                logger.error(f"Failed to add column 'constructor_id' with quotes: {e}")
+                session.rollback() # Important! Clear failed transaction
                 try:
                     session.connection().execute(text("ALTER TABLE order ADD COLUMN constructor_id INTEGER"))
                     session.commit()
+                    logger.info("Added 'constructor_id' column (no quotes).")
                 except Exception as e2:
-                     logger.error(f"Retry failed: {e2}")
+                     logger.error(f"Failed to add 'constructor_id' (no quotes): {e2}")
+                     session.rollback()
+
     # 3. Add date_design_deadline column to Order table
     with Session(engine) as session:
         try:
-            session.exec(text("SELECT date_design_deadline FROM \"order\" LIMIT 1"))
-            logger.info("Column 'date_design_deadline' already exists.")
+            # Check for column existence (Postgres is case sensitive with quotes)
+            try:
+                session.exec(text("SELECT date_design_deadline FROM \"order\" LIMIT 1"))
+                logger.info("Column 'date_design_deadline' already exists.")
+            except Exception:
+                 session.rollback() # Reset if select failed (e.g. table not found in this transaction)
+                 raise Exception("Column not found") # Trigger addition
         except Exception:
             logger.info("Column 'date_design_deadline' not found. Adding it...")
             try:
@@ -52,12 +60,15 @@ def migrate():
                 session.commit()
                 logger.info("Added 'date_design_deadline' column.")
             except Exception as e:
-                logger.error(f"Failed to add column 'date_design_deadline': {e}")
+                logger.error(f"Failed to add column 'date_design_deadline' with quotes: {e}")
+                session.rollback()
                 try:
                     session.connection().execute(text("ALTER TABLE order ADD COLUMN date_design_deadline DATE"))
                     session.commit()
+                    logger.info("Added 'date_design_deadline' column (no quotes).")
                 except Exception as e2:
-                     logger.error(f"Retry failed: {e2}")
+                     logger.error(f"Retry failed for 'date_design_deadline': {e2}")
+                     session.rollback()
 
     # 4. Seed Default Admin
     with Session(engine) as session:
