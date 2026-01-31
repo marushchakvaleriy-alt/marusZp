@@ -94,13 +94,7 @@ const Dashboard = ({ refreshTrigger }) => {
 
                     // Separate positive debts (customer owes) and negative debts (technologist owes)
                     // Calculate for ALL orders to ensure credits (fines) are counted even if order is 'paid'
-                    let adjustedDebt;
-                    if (order.is_critical_debt) {
-                        adjustedDebt = order.current_debt - orderFines;
-                    } else {
-                        // If not critical (e.g. paid), check remainder or assume 0 debt but check fines
-                        adjustedDebt = order.remainder_amount - orderFines;
-                    }
+                    const adjustedDebt = order.current_debt - orderFines;
 
                     if (adjustedDebt > 0) {
                         // Positive debt: customer owes technologist
