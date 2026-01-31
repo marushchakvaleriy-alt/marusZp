@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { updateOrder, deleteOrder, getDeductions, createDeduction, deleteDeduction } from '../api';
+import { updateOrder, deleteOrder, getDeductions, createDeduction, deleteDeduction, getUsers } from '../api';
 import FileManager from './FileManager';
+import { useAuth } from '../context/AuthContext';
 
 // Editable Date Component
 const EditableDate = ({ value, onSave, className, emptyText = "--.--.--" }) => {
@@ -60,13 +61,23 @@ const EditableDate = ({ value, onSave, className, emptyText = "--.--.--" }) => {
 };
 
 const OrderDetail = ({ order, onBack, onUpdate }) => {
+    const { user } = useAuth(); // To check if admin
+    const isAdmin = user?.role === 'admin';
     // const [isEditing, setIsEditing] = useState(false); // Removed
     const [isEditingInfo, setIsEditingInfo] = useState(false);
     const [infoData, setInfoData] = useState({
         name: order.name,
         price: order.price,
-        product_types: order.product_types ? JSON.parse(order.product_types) : []
+        product_types: order.product_types ? JSON.parse(order.product_types) : [],
+        constructor_id: order.constructor_id || ''
     });
+    const [constructors, setConstructors] = useState([]);
+
+    useEffect(() => {
+        if (isEditingInfo && isAdmin) {
+            getUsers().then(setConstructors).catch(console.error);
+        }
+    }, [isEditingInfo, isAdmin]);
     const [customType, setCustomType] = useState('');
 
     // Deductions state
@@ -108,7 +119,8 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
             const updateData = {
                 name: infoData.name,
                 price: parseFloat(infoData.price),
-                product_types: JSON.stringify(infoData.product_types)
+                product_types: JSON.stringify(infoData.product_types),
+                constructor_id: infoData.constructor_id ? parseInt(infoData.constructor_id) : null
             };
             await updateOrder(order.id, updateData);
             setIsEditingInfo(false);
@@ -283,6 +295,25 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Constructor Selection (Admin Only) */}
+                            {isAdmin && (
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-2">Конструктор</label>
+                                    <select
+                                        value={infoData.constructor_id}
+                                        onChange={e => setInfoData({ ...infoData, constructor_id: e.target.value })}
+                                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-bold"
+                                    >
+                                        <option value="">-- Не призначено --</option>
+                                        {constructors.map(u => (
+                                            <option key={u.id} value={u.id}>
+                                                {u.full_name || u.username} ({u.role})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="flex justify-between items-center">

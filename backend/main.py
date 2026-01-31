@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import create_db_and_tables
+from migrate_auth import migrate
 from routes import router
 
 app = FastAPI(title="TechPay Pro")
@@ -22,7 +23,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
-    create_db_and_tables()
+    # Run migration (create tables + check for new columns)
+    migrate()
 
 app.include_router(router)
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard';
 import OrderList from './components/OrderList';
 import OrderDetail from './components/OrderDetail';
@@ -6,21 +6,52 @@ import PaymentHistory from './components/PaymentHistory';
 import DeductionsList from './components/DeductionsList';
 import { getOrder, resetDatabase } from './api';
 import ActivityLog from './components/ActivityLog';
+import { useAuth } from './context/AuthContext';
+import Login from './components/Login';
+import UserManagement from './components/UserManagement';
 
 function App() {
+    const { user, loading, logout } = useAuth();
     const [currentView, setCurrentView] = useState('list');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [statsRefreshKey, setStatsRefreshKey] = useState(0);
 
-    const handleSelectOrder = (order) => {
+    // Initial History Setup & Listener
+    useEffect(() => {
+        if (!window.history.state) {
+            window.history.replaceState({ view: 'list' }, '', '');
+        }
+
+        const handlePopState = (event) => {
+            if (event.state) {
+                setCurrentView(event.state.view || 'list');
+                setSelectedOrder(event.state.order || null);
+            } else {
+                setCurrentView('list');
+                setSelectedOrder(null);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    const navigateTo = (view, order = null) => {
+        setCurrentView(view);
         setSelectedOrder(order);
-        setCurrentView('detail');
+        window.history.pushState({ view, order }, '', '');
+        window.scrollTo(0, 0);
+    };
+
+    const handleSelectOrder = (order) => {
+        navigateTo('detail', order);
     };
 
     const handleUpdateOrder = async () => {
         if (selectedOrder) {
             const updatedOrder = await getOrder(selectedOrder.id);
             setSelectedOrder(updatedOrder);
+            window.history.replaceState({ view: 'detail', order: updatedOrder }, '', '');
         }
     };
 
@@ -46,52 +77,77 @@ function App() {
         }
     };
 
+    if (loading) {
+        return <div className="min-h-screen flex items-center justify-center text-slate-500">Завантаження...</div>;
+    }
+
+    if (!user) {
+        return <Login />;
+    }
+
     return (
         <div className="min-h-screen p-4 lg:p-8">
             <div className="max-w-[1600px] mx-auto">
                 {currentView === 'list' && (
                     <>
-                        <>
-                            <Dashboard refreshTrigger={statsRefreshKey} />
-                            <div className="mb-6 flex justify-end gap-3 flex-wrap">
-                                <button
-                                    onClick={handleResetDatabase}
-                                    className="px-6 py-2 bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 hover:bg-black transition flex items-center gap-2"
-                                >
-                                    <i className="fas fa-trash-alt"></i> Очистити все
-                                </button>
-                                <button
-                                    onClick={() => setCurrentView('activity')}
-                                    className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
-                                >
-                                    <i className="fas fa-list-ul"></i> Історія дій
-                                </button>
-                                <button
-                                    onClick={() => setCurrentView('deductions')}
-                                    className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
-                                >
-                                    <i className="fas fa-exclamation-triangle"></i> Мої провини
-                                </button>
-                                <button
-                                    onClick={() => setCurrentView('payments')}
-                                    className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
-                                >
-                                    <i className="fas fa-history"></i> Історія платежів
-                                </button>
+                        <Dashboard refreshTrigger={statsRefreshKey} />
+                        <div className="mb-6 flex justify-end gap-3 flex-wrap items-center">
+                            <div className="mr-auto flex items-center gap-2">
+                                <span className="text-slate-500 font-bold">{user.username} ({user.role === 'admin' ? 'Адмін' : 'Конструктор'})</span>
+                                <button onClick={logout} className="text-red-500 hover:text-red-700 text-sm font-bold underline">Вийти</button>
                             </div>
-                            <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} refreshTrigger={statsRefreshKey} />
-                        </>
+
+                            {user.role === 'admin' && (
+                                <>
+                                    <button
+                                        onClick={() => navigateTo('users')}
+                                        className="px-6 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition flex items-center gap-2"
+                                    >
+                                        <i className="fas fa-users-cog"></i> Користувачі
+                                    </button>
+                                    <button
+                                        onClick={handleResetDatabase}
+                                        className="px-6 py-2 bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 hover:bg-black transition flex items-center gap-2"
+                                    >
+                                        <i className="fas fa-trash-alt"></i> Очистити все
+                                    </button>
+                                </>
+                            )}
+                            <button
+                                onClick={() => navigateTo('activity')}
+                                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
+                            >
+                                <i className="fas fa-list-ul"></i> Історія дій
+                            </button>
+                            <button
+                                onClick={() => navigateTo('deductions')}
+                                className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
+                            >
+                                <i className="fas fa-exclamation-triangle"></i> Мої провини
+                            </button>
+                            <button
+                                onClick={() => navigateTo('payments')}
+                                className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
+                            >
+                                <i className="fas fa-history"></i> Історія платежів
+                            </button>
+                        </div>
+                        <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} refreshTrigger={statsRefreshKey} />
                     </>
                 )}
 
                 {currentView === 'detail' && selectedOrder && (
-                    <OrderDetail order={selectedOrder} onBack={() => setCurrentView('list')} onUpdate={handleUpdateOrder} />
+                    <OrderDetail order={selectedOrder} onBack={() => window.history.back()} onUpdate={handleUpdateOrder} />
+                )}
+
+                {currentView === 'users' && (
+                    <UserManagement onBack={() => window.history.back()} />
                 )}
 
                 {currentView === 'payments' && (
                     <>
                         <button
-                            onClick={() => setCurrentView('list')}
+                            onClick={() => window.history.back()}
                             className="mb-6 text-slate-400 hover:text-blue-600 font-bold text-xs uppercase transition"
                         >
                             <i className="fas fa-arrow-left mr-2"></i> Назад до реєстру
@@ -100,10 +156,11 @@ function App() {
                     </>
                 )}
 
+                {/* ... other views ... */}
                 {currentView === 'deductions' && (
                     <>
                         <button
-                            onClick={() => setCurrentView('list')}
+                            onClick={() => window.history.back()}
                             className="mb-6 text-slate-400 hover:text-blue-600 font-bold text-xs uppercase transition"
                         >
                             <i className="fas fa-arrow-left mr-2"></i> Назад до реєстру
@@ -115,7 +172,7 @@ function App() {
                 {currentView === 'activity' && (
                     <>
                         <button
-                            onClick={() => setCurrentView('list')}
+                            onClick={() => window.history.back()}
                             className="mb-6 text-slate-400 hover:text-blue-600 font-bold text-xs uppercase transition"
                         >
                             <i className="fas fa-arrow-left mr-2"></i> Назад до реєстру

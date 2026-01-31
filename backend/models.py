@@ -3,17 +3,47 @@ from datetime import date
 from sqlmodel import Field, SQLModel
 from pydantic import BaseModel
 
+# User Model
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True)
+    password_hash: str
+    full_name: str
+    role: str = "constructor"  # 'admin' or 'constructor'
+    is_active: bool = True
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    full_name: str
+    role: str = "constructor"
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    full_name: str
+    role: str
+    is_active: bool
+
+class UserUpdate(BaseModel):
+    password: Optional[str] = None
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
 class OrderBase(SQLModel):
     name: str = Field(index=True)
     price: float = Field(default=0.0)
     product_types: Optional[str] = None  # JSON array of product types
     date_received: Optional[date] = None
+    date_design_deadline: Optional[date] = None # Deadline for constructor
     date_to_work: Optional[date] = None
     date_advance_paid: Optional[date] = None
     date_installation: Optional[date] = None
     date_final_paid: Optional[date] = None
     advance_paid_amount: float = Field(default=0.0)
     final_paid_amount: float = Field(default=0.0)
+    constructor_id: Optional[int] = Field(default=None, foreign_key="user.id") # Link to User
 
 class Order(OrderBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -36,6 +66,7 @@ class OrderUpdate(SQLModel):
     price: Optional[float] = None
     product_types: Optional[str] = None
     date_received: Optional[date] = None
+    date_design_deadline: Optional[date] = None
     date_to_work: Optional[date] = None
     date_advance_paid: Optional[date] = None
     date_installation: Optional[date] = None
@@ -43,6 +74,7 @@ class OrderUpdate(SQLModel):
     advance_paid_amount: Optional[float] = None
     final_paid_amount: Optional[float] = None
     id: Optional[int] = None # Allow updating ID manually
+    constructor_id: Optional[int] = None
 
 class OrderRead(OrderBase):
     id: int
@@ -55,6 +87,7 @@ class OrderRead(OrderBase):
     current_debt: float = 0.0
     is_critical_debt: bool
     status_payment: str
+    constructor_id: Optional[int] = None
 
     @classmethod
     def from_order(cls, order: Order):
@@ -107,7 +140,9 @@ class OrderRead(OrderBase):
                 # Installation done but final payment not paid = DEBT
                 (order.date_installation is not None and (date_final_paid is None and order.date_final_paid is None))
             ),
-            status_payment=status
+            status_payment=status,
+            constructor_id=order.constructor_id,
+            date_design_deadline=order.date_design_deadline
         )
 
     def __init__(self, **kwargs):

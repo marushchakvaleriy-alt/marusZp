@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getOrders, createOrder, getDeductions, updateOrder } from '../api';
+import { getOrders, createOrder, getDeductions, updateOrder, getUsers } from '../api';
 import PaymentModal from './PaymentModal';
+import { useAuth } from '../context/AuthContext';
 
 
 const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
@@ -9,9 +10,22 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
         name: '',
         price: '',
         date_received: '',
-        product_types: []
+        product_types: [],
+        constructor_id: ''
     });
     const [customType, setCustomType] = useState('');
+    const [constructors, setConstructors] = useState([]);
+
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+
+    useEffect(() => {
+        if (isOpen && isAdmin) {
+            getUsers().then(users => {
+                setConstructors(users);
+            }).catch(console.error);
+        }
+    }, [isOpen, isAdmin]);
 
     const productOptions = [
         'Кухня', 'Шафа', 'Передпокій', 'Санвузол', 'Вітальня',
@@ -53,8 +67,10 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
             name: formData.name,
             price: parseFloat(formData.price),
             date_received: formData.date_received || null,
+            date_received: formData.date_received || null,
             product_types: JSON.stringify(formData.product_types),
-            date_to_work: null
+            date_to_work: null,
+            constructor_id: formData.constructor_id ? parseInt(formData.constructor_id) : null
         });
         setFormData({ id: '', name: '', price: '', date_received: '', product_types: [] });
         setCustomType('');
@@ -164,6 +180,24 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
                         />
                     </div>
 
+                    {isAdmin && (
+                        <div className="mb-4">
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити конструктора</label>
+                            <select
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                                value={formData.constructor_id}
+                                onChange={e => setFormData({ ...formData, constructor_id: e.target.value })}
+                            >
+                                <option value="">-- Не призначено --</option>
+                                {constructors.map(u => (
+                                    <option key={u.id} value={u.id}>
+                                        {u.full_name || u.username} ({u.role === 'admin' ? 'Адмін' : 'Конструктор'})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="flex justify-end gap-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-slate-400 font-bold text-sm hover:text-slate-600 transition">Скасувати</button>
                         <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition">Створити</button>
@@ -182,6 +216,16 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState('active'); // 'active' or 'archived'
     const [searchQuery, setSearchQuery] = useState('');
+    const [filterConstructorId, setFilterConstructorId] = useState('');
+    const [constructors, setConstructors] = useState([]);
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+
+    useEffect(() => {
+        if (isAdmin) {
+            getUsers().then(setConstructors).catch(console.error);
+        }
+    }, [isAdmin]);
 
     const fetchOrders = async () => {
         try {
@@ -248,8 +292,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             order.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (order.product_types && order.product_types.toLowerCase().includes(searchQuery.toLowerCase()));
 
-        return matchesViewMode && matchesSearch;
-    }).sort((a, b) => a.id - b.id); // Sort by ID ascending
+        const matchesConstructor = !filterConstructorId ||
+            (filterConstructorId === 'unassigned' ? !order.constructor_id : order.constructor_id === parseInt(filterConstructorId));
+
+        return matchesViewMode && matchesSearch && matchesConstructor;
+    }).sort((a, b) => b.id - a.id); // Sort by ID descending (newest first)
 
     return (
         <div id="list-page">
@@ -297,6 +344,23 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     </button>
                 </div>
 
+                {/* Constructor Filter */}
+                {isAdmin && (
+                    <div className="w-full md:w-64">
+                        <select
+                            value={filterConstructorId}
+                            onChange={(e) => setFilterConstructorId(e.target.value)}
+                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none transition font-bold text-slate-700 cursor-pointer bg-white"
+                        >
+                            <option value="">👨‍🔧 Всі конструктори</option>
+                            <option value="unassigned">-- Не призначено --</option>
+                            {constructors.map(c => (
+                                <option key={c.id} value={c.id}>{c.full_name || c.username}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 {/* Search Input */}
                 <div className="flex-1">
                     <input
@@ -327,6 +391,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                             <th className="p-4 pl-6 border-b font-bold">ID</th>
                             <th className="p-4 border-b font-bold">Виріб / Об'єкт</th>
                             <th className="p-4 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
+                            <th className="p-4 border-b text-center font-bold text-red-500">Дедлайн</th>
                             <th className="p-4 border-b text-right font-bold">Ціна (100%)</th>
                             <th className="p-4 border-b text-right font-bold text-blue-500">ЗП (5%)</th>
                             <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/50">Етап I: Конструктив (50%)</th>
@@ -359,6 +424,13 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                     <td className="p-4">
                                         <div className="font-black text-slate-800 italic text-base">{order.name}</div>
+                                        {/* Constructor Name Display */}
+                                        {order.constructor_id && (
+                                            <div className="text-xs font-bold text-blue-600 mt-1 flex items-center gap-1">
+                                                <span>👨‍🔧</span>
+                                                {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
+                                            </div>
+                                        )}
                                         {order.product_types && (() => {
                                             try {
                                                 const types = JSON.parse(order.product_types);
@@ -383,6 +455,47 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                         <span className="text-sm font-bold text-purple-600 italic">
                                             {formatDate(order.date_received)}
                                         </span>
+                                    </td>
+
+                                    <td className="p-4 text-center">
+                                        {/* Design Deadline Input (Admin Only) */}
+                                        {isAdmin && !isPaidStage1 && (
+                                            <div className="flex justify-center" onClick={e => e.stopPropagation()}>
+                                                <input
+                                                    type="date"
+                                                    className={`w-28 text-[12px] font-bold p-1 bg-white border rounded shadow-sm focus:border-blue-500 ${!order.date_to_work && order.date_design_deadline && new Date() > new Date(order.date_design_deadline)
+                                                        ? 'border-red-400 text-red-600'
+                                                        : 'border-slate-200 text-slate-700'
+                                                        }`}
+                                                    value={order.date_design_deadline || ''}
+                                                    onChange={async (e) => {
+                                                        try {
+                                                            await updateOrder(order.id, { date_design_deadline: e.target.value || null });
+                                                            fetchOrders();
+                                                        } catch (err) {
+                                                            console.error("Failed to update deadline", err);
+                                                            alert("Помилка оновлення дедлайну");
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        {(!isAdmin || isPaidStage1) && order.date_design_deadline && (
+                                            (() => {
+                                                const isOverdue = !order.date_to_work && new Date() > new Date(order.date_design_deadline);
+                                                return (
+                                                    <div className={`text-[12px] font-bold px-2 py-1 rounded inline-block ${isOverdue
+                                                        ? 'text-red-500 bg-red-50 border border-red-100'
+                                                        : 'text-blue-600 bg-blue-50 border border-blue-100'
+                                                        }`}>
+                                                        {isOverdue && '⚠️ '} {formatDate(order.date_design_deadline)}
+                                                    </div>
+                                                );
+                                            })()
+                                        )}
+                                        {!order.date_design_deadline && !isAdmin && (
+                                            <span className="text-slate-300 text-xs">—</span>
+                                        )}
                                     </td>
 
                                     <td className="p-4 text-right font-bold text-slate-600 italic mono">

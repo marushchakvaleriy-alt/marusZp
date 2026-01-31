@@ -1,17 +1,88 @@
 import os
 import shutil
 from typing import List, Optional
-from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from datetime import date, datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse
-from sqlmodel import Session, select
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlmodel import Session, select, desc
 from database import get_session
-from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead
+from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead, User, UserCreate, UserRead, UserUpdate
 from payments import Payment, PaymentAllocation, PaymentRead
 from payment_service import PaymentDistributionService
 from pydantic import BaseModel
+from auth import get_current_user, get_admin_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter()
+
+# --- AUTH ROUTES ---
+
+@router.post("/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+    print(f"--- LOGIN ATTEMPT ---")
+    print(f"Username received: '{form_data.username}'")
+    print(f"Password received: '{form_data.password}'")
+    
+    user = session.exec(select(User).where(User.username == form_data.username)).first()
+    
+    if not user:
+        print("RESULT: User not found in DB!")
+    else:
+        print(f"User found: ID {user.id}, Role {user.role}")
+        print(f"Stored Hash: {user.password_hash}")
+        is_valid = verify_password(form_data.password, user.password_hash)
+        print(f"Password Check: {'VALID' if is_valid else 'INVALID'}")
+        if not is_valid:
+             # Double check what bcrypt.checkpw returns
+             try:
+                 pwd_bytes = form_data.password.encode('utf-8')
+                 hash_bytes = user.password_hash.encode('utf-8')
+                 import bcrypt
+                 res = bcrypt.checkpw(pwd_bytes, hash_bytes)
+                 print(f"Manual Check inside route: {res}")
+             except Exception as e:
+                 print(f"Manual Check Error: {e}")
+
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    print("LOGIN SUCCESS")
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/users/me", response_model=UserRead)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+# Admin only: Create User
+@router.post("/users", response_model=UserRead)
+async def create_user(user: UserCreate, current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
+    db_user = session.exec(select(User).where(User.username == user.username)).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    hashed_password = get_password_hash(user.password)
+    new_user = User(
+        username=user.username,
+        password_hash=hashed_password,
+        full_name=user.full_name,
+        role=user.role
+    )
+    session.add(new_user)
+    session.commit()
+    session.refresh(new_user)
+    return new_user
+
+@router.get("/users", response_model=List[UserRead])
+async def read_users(current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
+    users = session.exec(select(User)).all()
+    return users
 
 # Payment DTOs
 class PaymentCreate(BaseModel):
@@ -33,18 +104,59 @@ def get_logs(session: Session = Depends(get_session)):
     return session.exec(select(ActivityLog).order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())).all()
 
 @router.post("/orders/", response_model=OrderRead)
-def create_order(order: OrderCreate, session: Session = Depends(get_session)):
+async def create_order(order: OrderCreate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    # Create DB model from input
     db_order = Order.from_orm(order)
+    
+    # If not admin, force constructor_id to own id? Or restrict creation?
+    # Assuming only admin creates orders for now, or constructors create their own
+    if current_user.role != 'admin' and not db_order.constructor_id:
+        db_order.constructor_id = current_user.id
+        
     session.add(db_order)
     session.commit()
     session.refresh(db_order)
-    log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}'")
+    
+    # Log activity
+    log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}' (Автор: {current_user.username})")
     return OrderRead.from_order(db_order)
 
 @router.get("/orders/", response_model=List[OrderRead])
-def read_orders(session: Session = Depends(get_session)):
-    orders = session.exec(select(Order)).all()
-    return [OrderRead.from_order(order) for order in orders]
+async def read_orders(
+    skip: int = 0, 
+    limit: int = 100, 
+    search: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        query = select(Order)
+        
+        # FILTER BY ROLE
+        if current_user.role != 'admin':
+            print(f"Filtering orders for CONST ID: {current_user.id}")
+            # Constructor sees only their assigned orders
+            query = query.where(Order.constructor_id == current_user.id)
+
+        if search:
+            # Simple search by name or ID
+            if search.isdigit():
+                query = query.where(Order.id == int(search))
+            else:
+                query = query.where(Order.name.contains(search))
+        
+        # Sort by ID descending (newest first)
+        query = query.order_by(desc(Order.id))
+        query = query.offset(skip).limit(limit)
+        
+        orders = session.exec(query).all()
+        # Convert using the logic-heavy from_order method
+        return [OrderRead.from_order(order) for order in orders]
+    except Exception as e:
+        print(f"CRITICAL ERROR in read_orders: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
 
 @router.get("/orders/{order_id}", response_model=OrderRead)
 def read_order(order_id: int, session: Session = Depends(get_session)):
@@ -364,30 +476,59 @@ def delete_deduction(deduction_id: int, session: Session = Depends(get_session))
     return {"message": "Deduction deleted successfully"}
 
 @router.get("/stats/financial")
-def get_financial_stats(session: Session = Depends(get_session)):
+def get_financial_stats(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
     from sqlalchemy import func
     from payments import Payment, PaymentAllocation
     
     try:
-        total_received = session.exec(select(func.sum(Payment.amount))).one()
-        total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
-        total_deductions = session.exec(select(func.sum(Deduction.amount)).where(Deduction.is_paid == False)).one()
+        # If Admin - Global Stats
+        if current_user.role == 'admin':
+            total_received = session.exec(select(func.sum(Payment.amount))).one()
+            total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
+            total_deductions = session.exec(select(func.sum(Deduction.amount)).where(Deduction.is_paid == False)).one()
+            
+            if total_received is None: total_received = 0.0
+            if total_allocated is None: total_allocated = 0.0
+            if total_deductions is None: total_deductions = 0.0
+            
+            unallocated = total_received - total_allocated
+            
+            return {
+                "total_received": total_received,
+                "total_allocated": total_allocated,
+                "unallocated": unallocated,
+                "total_deductions": total_deductions
+            }
         
-        # one() on sum can return None if table is empty
-        if total_received is None: total_received = 0.0
-        if total_allocated is None: total_allocated = 0.0
-        if total_deductions is None: total_deductions = 0.0
-        
-        # Unallocated funds = (Real payments received) - (Payments allocated to work)
-        # Fines don't appear here - they only reduce debt on specific orders
-        unallocated = total_received - total_allocated
-        
-        return {
-            "total_received": total_received,
-            "total_allocated": total_allocated,
-            "unallocated": unallocated,
-            "total_deductions": total_deductions
-        }
+        else:
+            # Constructor - ONLY THEIR OWN TOTALS
+            # This is tricky because payments are global. 
+            # We will show sum of 'price' of their assigned orders as a proxy? 
+            # OR show sum of allocations to THEIR orders.
+            
+            # Show sum of allocations to their orders (Actual money earned/allocated)
+            my_allocations = session.exec(
+                select(func.sum(PaymentAllocation.amount))
+                .join(Order)
+                .where(Order.constructor_id == current_user.id)
+            ).one()
+            
+            # Show total price of their projects
+            my_projects_value = session.exec(
+                select(func.sum(Order.price))
+                .where(Order.constructor_id == current_user.id)
+            ).one()
+
+            if my_allocations is None: my_allocations = 0.0
+            if my_projects_value is None: my_projects_value = 0.0
+            
+            # Constructors shouldn't see 'unallocated' company money.
+            return {
+                "total_received": my_allocations, # Re-label for UI reuse
+                "total_allocated": my_projects_value * 0.05, # Bonus potential? Or just 0
+                "unallocated": 0.0,
+                "total_deductions": 0.0 # Or specific fines
+            }
 
     except Exception as e:
         print(f"Error calculating stats: {e}")
