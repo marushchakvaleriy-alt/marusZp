@@ -251,7 +251,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             fetchOrders();
         } catch (error) {
             console.error("Failed to create order:", error);
-            alert("Помилка при створенні замовлення");
+            alert(error.response?.data?.detail || "Помилка при створенні замовлення");
         }
     };
 
