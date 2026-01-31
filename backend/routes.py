@@ -99,6 +99,36 @@ def log_activity(session: Session, action_type: str, description: str, details: 
     except Exception as e:
         print(f"Failed to log activity: {e}")
 
+@router.get("/fix-db")
+def fix_database_schema(session: Session = Depends(get_session)):
+    logs = []
+    
+    # helper to run command
+    def run_sql(sql):
+        try:
+            session.connection().execute(text(sql))
+            session.commit()
+            logs.append(f"SUCCESS: {sql}")
+        except Exception as e:
+            session.rollback()
+            logs.append(f"FAILED: {sql} | Error: {str(e)}")
+
+    logs.append("--- STARTING MANUAL MIGRATION ---")
+    
+    # 1. Constructor ID
+    logs.append("Attempting to add constructor_id...")
+    # Postgres specific try
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS constructor_id INTEGER')
+    # Fallback (simple)
+    run_sql('ALTER TABLE order ADD COLUMN constructor_id INTEGER')
+
+    # 2. Date Design Deadline
+    logs.append("Attempting to add date_design_deadline...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_design_deadline DATE')
+    run_sql('ALTER TABLE order ADD COLUMN date_design_deadline DATE')
+
+    return {"status": "completed", "logs": logs}
+
 @router.get("/logs", response_model=List[ActivityLogRead])
 def get_logs(session: Session = Depends(get_session)):
     return session.exec(select(ActivityLog).order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())).all()

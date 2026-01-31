@@ -317,6 +317,25 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         <span className="text-xl">💵</span> Додати платіж
                     </button>
 
+                    {isAdmin && (
+                        <button
+                            onClick={async () => {
+                                if (!confirm("Запустити виправлення бази даних?")) return;
+                                try {
+                                    const res = await api.get('/fix-db');
+                                    alert("Результат:\n" + res.data.logs.join("\n"));
+                                    window.location.reload();
+                                } catch (e) {
+                                    alert("Помилка: " + e.message);
+                                }
+                            }}
+                            className="bg-slate-800 text-white w-10 h-10 rounded-full font-bold shadow-lg hover:bg-slate-700 transition flex items-center justify-center ml-4"
+                            title="Виправити базу даних"
+                        >
+                            🔧
+                        </button>
+                    )}
+
                 </div>
             </div>
 
