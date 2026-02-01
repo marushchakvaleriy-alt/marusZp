@@ -67,7 +67,10 @@ def create_user(user: UserCreate, current_user: User = Depends(get_admin_user), 
         username=user.username,
         password_hash=hashed_password,
         full_name=user.full_name,
-        role=user.role
+        role=user.role,
+        card_number=user.card_number,
+        email=user.email,
+        phone_number=user.phone_number
     )
     session.add(new_user)
     session.commit()
@@ -84,7 +87,9 @@ class PaymentCreate(BaseModel):
     amount: float
     date_received: date
     notes: Optional[str] = None
+    notes: Optional[str] = None
     manual_order_id: Optional[int] = None  # Якщо вказано, розподіл на конкретне замовлення
+    constructor_id: Optional[int] = None # Якщо вказано, розподіл по замовленнях цього конструктора
 
 def log_activity(session: Session, action_type: str, description: str, details: Optional[str] = None):
     try:
@@ -121,6 +126,32 @@ def fix_database_schema(session: Session = Depends(get_session)):
     logs.append("Attempting to add date_design_deadline...")
     run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_design_deadline DATE')
     run_sql('ALTER TABLE order ADD COLUMN date_design_deadline DATE')
+
+    # 3. Payment Columns (allocated_automatically, notes, manual_order_id)
+    logs.append("Checking Payment table columns...")
+    run_sql('ALTER TABLE payment ADD COLUMN IF NOT EXISTS allocated_automatically BOOLEAN DEFAULT TRUE')
+    run_sql('ALTER TABLE payment ADD COLUMN allocated_automatically BOOLEAN DEFAULT 1') 
+    
+    run_sql('ALTER TABLE payment ADD COLUMN IF NOT EXISTS notes VARCHAR')
+    run_sql('ALTER TABLE payment ADD COLUMN notes TEXT')
+    
+    run_sql('ALTER TABLE payment ADD COLUMN IF NOT EXISTS manual_order_id INTEGER REFERENCES "order"(id)')
+    # Fallback without FK (safest for SQLite updates)
+    run_sql('ALTER TABLE payment ADD COLUMN manual_order_id INTEGER')
+    
+    run_sql('ALTER TABLE payment ADD COLUMN IF NOT EXISTS constructor_id INTEGER REFERENCES "user"(id)')
+    run_sql('ALTER TABLE payment ADD COLUMN constructor_id INTEGER')
+
+    # 4. User Columns (card_number, email)
+    logs.append("Checking User table columns...")
+    run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS card_number VARCHAR')
+    run_sql('ALTER TABLE user ADD COLUMN card_number TEXT')
+    
+    run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS email VARCHAR')
+    run_sql('ALTER TABLE user ADD COLUMN email TEXT')
+
+    run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS phone_number VARCHAR')
+    run_sql('ALTER TABLE user ADD COLUMN phone_number TEXT')
 
     return {"status": "completed", "logs": logs}
 
@@ -195,6 +226,34 @@ def read_orders(
     except Exception as e:
         print(f"ERROR READING ORDERS: {e}")
         return []
+
+@router.patch("/users/{user_id}", response_model=UserRead)
+def update_user(
+    user_id: int, 
+    user_update: UserUpdate, 
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
+    db_user = session.get(User, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = user_update.dict(exclude_unset=True)
+    
+    if "password" in update_data:
+        password = update_data.pop("password")
+        if password: # Only if string is not empty
+            db_user.password_hash = get_password_hash(password)
+    
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+    
+    session.add(db_user)
+    session.commit()
+    session.refresh(db_user)
+    
+    log_activity(session, "UPDATE_USER", f"Оновлено профіль {db_user.username} (Адмін: {current_user.username})")
+    return db_user
 
 @router.delete("/users/{user_id}")
 def delete_user(
@@ -311,42 +370,41 @@ def delete_order(order_id: int, session: Session = Depends(get_session)):
 @router.post("/payments/")
 def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_session)):
     """Додати платіж і автоматично розподілити його"""
-    payment = Payment(
-        amount=payment_data.amount,
-        date_received=payment_data.date_received,
-        notes=payment_data.notes,
-        allocated_automatically=payment_data.manual_order_id is None
-    )
-    session.add(payment)
-    session.commit()
-    session.refresh(payment)
-    
-    # Розподілити ВСІ доступні кошти (включаючи старі залишки)
-    allocations = PaymentDistributionService.distribute_all_unallocated(session)
-    
-    # Calculate remaining specifically for THIS payment for response (just for UI)
-    existing_allocs = session.exec(
-        select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
-    ).all()
-    used = sum(a.amount for a in existing_allocs)
-    remaining = payment.amount - used
-    
-    log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
-    return {
-        "payment_id": payment.id,
-        "allocations": allocations, # This might return allocations from OTHER payments too, but for UI feedback it shows "what happened now"
-        "remaining_amount": remaining,
-        "message": f"Платіж розподілено. Залишок: {remaining:.2f} грн" if remaining > 0 else "Платіж повністю розподілено"
-    }
-    
-    
-    log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
-    return {
-        "payment_id": payment.id,
-        "allocations": allocations,
-        "remaining_amount": remaining,
-        "message": f"Платіж розподілено. Залишок: {remaining:.2f} грн" if remaining > 0 else "Платіж повністю розподілено"
-    }
+    try:
+        payment = Payment(
+            amount=payment_data.amount,
+            date_received=payment_data.date_received,
+            notes=payment_data.notes,
+            allocated_automatically=payment_data.manual_order_id is None,
+            manual_order_id=payment_data.manual_order_id,
+            constructor_id=payment_data.constructor_id
+        )
+        session.add(payment)
+        session.commit()
+        session.refresh(payment)
+        
+        # Розподілити ВСІ доступні кошти (включаючи старі залишки)
+        allocations = PaymentDistributionService.distribute_all_unallocated(session)
+        
+        # Calculate remaining specifically for THIS payment for response (just for UI)
+        existing_allocs = session.exec(
+            select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
+        ).all()
+        used = sum(a.amount for a in existing_allocs)
+        remaining = payment.amount - used
+        
+        log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
+        return {
+            "payment_id": payment.id,
+            "allocations": allocations,
+            "remaining_amount": remaining,
+            "message": f"Платіж розподілено. Залишок: {remaining:.2f} грн" if remaining > 0 else "Платіж повністю розподілено"
+        }
+    except Exception as e:
+        session.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Payment Error: {str(e)}")
 
 @router.delete("/payments/{payment_id}")
 def delete_payment(payment_id: int, session: Session = Depends(get_session)):
@@ -567,11 +625,74 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
         
         unallocated = total_received - total_allocated
         
+        # Per-Constructor Stats
+        constructors_stats = []
+        constructors = session.exec(select(User).where(User.role == 'constructor')).all()
+        
+        for c in constructors:
+            # 1. Undistributed (Payments tagged for them - Allocations linked to those payments)
+            c_payments = session.exec(select(Payment).where(Payment.constructor_id == c.id)).all()
+            c_total_received = sum(p.amount for p in c_payments)
+            
+            # Find allocations for these payments
+            c_payment_ids = [p.id for p in c_payments]
+            if c_payment_ids:
+                c_total_allocated = session.exec(
+                    select(func.sum(PaymentAllocation.amount))
+                    .where(PaymentAllocation.payment_id.in_(c_payment_ids))
+                ).one() or 0.0
+            else:
+                c_total_allocated = 0.0
+                
+            c_unallocated = c_total_received - c_total_allocated
+            
+            # 2. Debt (Unpaid salary for their orders)
+            # Find all orders for this constructor
+            c_orders = session.exec(select(Order).where(Order.constructor_id == c.id)).all()
+            c_debt = 0.0
+            
+            for o in c_orders:
+                # Calculate debt logic same as OrderRead
+                bonus = o.price * 0.05
+                advance_amount = bonus * 0.5
+                final_amount = bonus * 0.5
+                
+                advance_remaining = max(0, advance_amount - o.advance_paid_amount)
+                final_remaining = max(0, final_amount - o.final_paid_amount)
+                
+                order_current_debt = 0.0
+                # If work started (phase 1) but not fully paid
+                if o.date_to_work and advance_remaining > 0.01:
+                     order_current_debt += advance_remaining
+                # If installation done (phase 2) but not fully paid
+                if o.date_installation and final_remaining > 0.01:
+                     order_current_debt += final_remaining
+                
+                # Deduct unpaid fines for this order
+                unpaid_fines = session.exec(
+                    select(func.sum(Deduction.amount))
+                    .where(Deduction.order_id == o.id)
+                    .where(Deduction.is_paid == False)
+                ).one() or 0.0
+                
+                # Net debt for this order (salary - fines)
+                # If fines > salary, debt is 0 (it becomes negative balance, but here we track Debt we OWE)
+                # Actually, strictly speaking "Debt" card usually shows what we owe.
+                c_debt += max(0, order_current_debt - unpaid_fines)
+
+            constructors_stats.append({
+                "id": c.id,
+                "name": c.full_name or c.username,
+                "unallocated": c_unallocated,
+                "debt": c_debt
+            })
+        
         return {
             "total_received": total_received,
             "total_allocated": total_allocated,
             "unallocated": unallocated,
-            "total_deductions": total_deductions
+            "total_deductions": total_deductions,
+            "constructors_stats": constructors_stats
         }
 
     except Exception as e:

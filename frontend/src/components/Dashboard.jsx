@@ -129,7 +129,8 @@ const Dashboard = ({ refreshTrigger }) => {
                     totalDeductions: totalDeductions.toLocaleString(),
                     unpaidAdvances: unpaidAdvances.toLocaleString(),
                     customerBalance: customerBalance.toLocaleString(),
-                    unallocatedFunds: (financialStats.unallocated + customerBalance).toLocaleString()
+                    unallocatedFunds: (financialStats.unallocated + customerBalance).toLocaleString(),
+                    constructorStats: financialStats.constructors_stats || []
                 });
             } catch (error) {
                 console.error("Failed to fetch stats:", error);
@@ -142,9 +143,39 @@ const Dashboard = ({ refreshTrigger }) => {
     if (!user) return null;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-            <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
-            <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
+        <div className="space-y-6 mb-10">
+            {/* Global Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
+                <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
+            </div>
+
+            {/* Per-Constructor Stats (Admin Only) */}
+            {isAdmin && stats.constructorStats && stats.constructorStats.length > 0 && (
+                <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
+                    <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest pl-2">По конструкторах</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {stats.constructorStats.map(c => (
+                            <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
+                                <p className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                                    {c.name}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <p className="text-[10px] text-red-300 font-bold uppercase">Борг</p>
+                                        <p className="text-lg font-black text-red-500">{c.debt.toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-yellow-300 font-bold uppercase">Вільні</p>
+                                        <p className="text-lg font-black text-yellow-600">{c.unallocated.toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -337,13 +337,33 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                 <h1 className="text-2xl font-black text-slate-800 italic uppercase">Реєстр замовлень</h1>
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-4">
                     {isAdmin && (
-                        <button
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="bg-slate-700 text-white px-4 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg hover:bg-slate-800 transition flex items-center justify-center gap-2"
-                            title="Налаштування збереження файлів"
-                        >
-                            <i className="fas fa-cog text-lg"></i>
-                        </button>
+                        <>
+                            <button
+                                onClick={async () => {
+                                    if (confirm("Виправити структуру бази даних?")) {
+                                        try {
+                                            await api.get('/fix-db');
+                                            alert("База даних оновлена! 🛠️");
+                                            window.location.reload();
+                                        } catch (e) {
+                                            alert("Помилка: " + e.message);
+                                        }
+                                    }
+                                }}
+                                className="bg-red-500 text-white px-3 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg hover:bg-red-600 transition flex items-center justify-center gap-2"
+                                title="Виправити базу даних (якщо є помилки)"
+                            >
+                                <span className="text-xl">🔧</span>
+                            </button>
+
+                            <button
+                                onClick={() => setIsSettingsOpen(true)}
+                                className="bg-slate-700 text-white px-4 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg hover:bg-slate-800 transition flex items-center justify-center gap-2"
+                                title="Налаштування збереження файлів"
+                            >
+                                <i className="fas fa-cog text-lg"></i>
+                            </button>
+                        </>
                     )}
 
                     <button
@@ -353,12 +373,14 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         <span className="text-xl">+</span> Нове замовлення
                     </button>
 
-                    <button
-                        onClick={() => setIsPaymentModalOpen(true)}
-                        className="bg-green-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-green-200 hover:bg-green-700 transition flex items-center justify-center gap-2"
-                    >
-                        <span className="text-xl">💵</span> Додати платіж
-                    </button>
+                    {isAdmin && (
+                        <button
+                            onClick={() => setIsPaymentModalOpen(true)}
+                            className="bg-green-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-green-200 hover:bg-green-700 transition flex items-center justify-center gap-2"
+                        >
+                            <span className="text-xl">💵</span> Додати платіж
+                        </button>
+                    )}
                 </div>
             </div>
 

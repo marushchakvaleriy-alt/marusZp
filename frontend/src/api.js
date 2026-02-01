@@ -123,3 +123,8 @@ export const uploadFile = async (orderId, folderCategory, file) => {
     });
     return response.data;
 };
+
+export const updateUser = async (id, userData) => {
+    const response = await api.patch(`/users/${id}`, userData);
+    return response.data;
+};

@@ -146,14 +146,20 @@ class PaymentDistributionService:
 
             # Визначаємо цільові замовлення: одне (ручний) чи всі (авто)
             target_orders = orders
+            
+            # Пріоритет 1: Ручний вибір конкретного замовлення
             if payment.manual_order_id:
                 manual_order = next((o for o in orders if o.id == payment.manual_order_id), None)
                 if manual_order:
                     target_orders = [manual_order]
                 else:
-                    # Якщо вказане замовлення не знайдено (видалено?), пропускаємо або кидаємо в загальний котел?
-                    # Безпечніше пропустити або логувати. Поки що зробимо fallback на всі.
-                    pass 
+                    # Якщо замовлення не знайдено, не розподіляємо нікуди
+                    target_orders = [] 
+            
+            # Пріоритет 2: Фільтрація по конструктору (якщо це не ручний вибір замовлення)
+            elif payment.constructor_id:
+                # Розподіляти ТІЛЬКИ на замовлення цього конструктора
+                target_orders = [o for o in orders if o.constructor_id == payment.constructor_id] 
 
             # Якщо є залишок, пробуємо його розподілити
             for order in target_orders:

@@ -11,12 +11,18 @@ class User(SQLModel, table=True):
     full_name: str
     role: str = "constructor"  # 'admin' or 'constructor'
     is_active: bool = True
+    card_number: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class UserCreate(BaseModel):
     username: str
     password: str
     full_name: str
     role: str = "constructor"
+    card_number: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class UserRead(BaseModel):
     id: int
@@ -24,12 +30,18 @@ class UserRead(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    card_number: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class UserUpdate(BaseModel):
     password: Optional[str] = None
     full_name: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    card_number: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class OrderBase(SQLModel):
     name: str = Field(index=True)

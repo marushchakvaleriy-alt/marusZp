@@ -70,26 +70,89 @@ def migrate():
                      logger.error(f"Retry failed for 'date_design_deadline': {e2}")
                      session.rollback()
 
-    # 4. Seed Default Admin
+                     logger.error(f"Retry failed for 'date_design_deadline': {e2}")
+                     session.rollback()
+
+    # 4. Add User Columns (card_number, email)
     with Session(engine) as session:
-        user = session.exec(select(User).where(User.username == "admin")).first()
-        if not user:
-            logger.info("Creating default admin user...")
-            admin_user = User(
-                username="admin",
-                password_hash=get_password_hash("admin"),
-                full_name="Administrator",
-                role="admin"
-            )
-            session.add(admin_user)
-            session.commit()
-            logger.info("Default admin created: admin / admin")
-        else:
-            logger.info("Admin user already exists. Updating password to ensure compatibility...")
-            user.password_hash = get_password_hash("admin")
-            session.add(user)
-            session.commit()
-            logger.info("Admin password reset to: admin")
+        try:
+            # Check for card_number
+            try:
+                session.exec(text("SELECT card_number FROM user LIMIT 1"))
+                logger.info("Column 'card_number' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'card_number' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN card_number VARCHAR"))
+                    session.commit()
+                    logger.info("Added 'card_number' column.")
+                except Exception as e:
+                     logger.error(f"Failed to add 'card_number': {e}")
+                     session.rollback()
+                     
+            # Check for email
+            try:
+                session.exec(text("SELECT email FROM user LIMIT 1"))
+                logger.info("Column 'email' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'email' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN email VARCHAR"))
+                    session.commit()
+                    logger.info("Added 'email' column.")
+                except Exception as e:
+                     logger.error(f"Failed to add 'email': {e}")
+                     session.rollback()
+                     
+                     logger.error(f"Failed to add 'email': {e}")
+                     session.rollback()
+
+            # Check for phone_number
+            try:
+                session.exec(text("SELECT phone_number FROM user LIMIT 1"))
+                logger.info("Column 'phone_number' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'phone_number' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN phone_number VARCHAR"))
+                    session.commit()
+                    logger.info("Added 'phone_number' column.")
+                except Exception as e:
+                     logger.error(f"Failed to add 'phone_number': {e}")
+                     session.rollback()
+                     
+        except Exception as outer_e:
+            logger.error(f"Error checking user columns: {outer_e}")
+            session.rollback()
+
+    # 5. Seed Default Admin
+    with Session(engine) as session:
+        try:
+            # This might fail if columns are still missing and mapping is strict
+            user = session.exec(select(User).where(User.username == "admin")).first()
+            if not user:
+                logger.info("Creating default admin user...")
+                admin_user = User(
+                    username="admin",
+                    password_hash=get_password_hash("admin"),
+                    full_name="Administrator",
+                    role="admin"
+                )
+                session.add(admin_user)
+                session.commit()
+                logger.info("Default admin created: admin / admin")
+            else:
+                logger.info("Admin user already exists. Updating password to ensure compatibility...")
+                user.password_hash = get_password_hash("admin")
+                session.add(user)
+                session.commit()
+                logger.info("Admin password reset to: admin")
+        except Exception as e:
+            logger.error(f"Failed to seed admin user (possibly schema mismatch): {e}")
+            session.rollback()
 
 if __name__ == "__main__":
     migrate()

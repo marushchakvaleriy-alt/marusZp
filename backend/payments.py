@@ -8,6 +8,8 @@ class Payment(SQLModel, table=True):
     date_received: date
     created_at: datetime = Field(default_factory=datetime.utcnow)
     allocated_automatically: bool = Field(default=True)
+    manual_order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+    constructor_id: Optional[int] = Field(default=None, foreign_key="user.id")
     notes: Optional[str] = None
 
 class PaymentAllocation(SQLModel, table=True):

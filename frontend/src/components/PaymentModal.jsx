@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { addPayment, getOrders } from '../api';
+import { addPayment, getOrders, getUsers } from '../api';
 
 const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
         amount: '',
         date_received: new Date().toISOString().split('T')[0],
         notes: '',
+        constructor_id: null,
         manual_order_id: null
     });
     const [orders, setOrders] = useState([]);
+    const [constructors, setConstructors] = useState([]);
     const [useManual, setUseManual] = useState(false);
     const [result, setResult] = useState(null);
 
     useEffect(() => {
         if (isOpen) {
             fetchOrders();
+            fetchConstructors();
             setResult(null);
         }
     }, [isOpen]);
@@ -28,6 +31,22 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
         }
     };
 
+    const fetchConstructors = async () => {
+        try {
+            const users = await getUsers();
+            // Filter only constructors
+            setConstructors(users.filter(u => u.role === 'constructor'));
+        } catch (error) {
+            console.error('Failed to fetch users:', error);
+        }
+    };
+
+    // Filter orders based on selected constructor (optional, helps find orders easier)
+    const getFilteredOrders = () => {
+        if (!formData.constructor_id) return orders;
+        return orders.filter(o => o.constructor_id === formData.constructor_id);
+    };
+
     if (!isOpen) return null;
 
     const handleSubmit = async (e) => {
@@ -36,8 +55,11 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
             const paymentData = {
                 amount: parseFloat(formData.amount),
                 date_received: formData.date_received,
-                notes: formData.notes || null,
-                manual_order_id: useManual ? formData.manual_order_id : null
+                notes: formData.constructor_id
+                    ? `Оплата для конструктора ID ${formData.constructor_id}`
+                    : null,
+                manual_order_id: useManual ? formData.manual_order_id : null,
+                constructor_id: formData.constructor_id || null
             };
 
             const response = await addPayment(paymentData);
@@ -46,14 +68,15 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
             if (onSuccess) {
                 setTimeout(() => {
                     onSuccess();
-                    setFormData({ amount: '', date_received: new Date().toISOString().split('T')[0], notes: '', manual_order_id: null });
+                    setFormData({ amount: '', date_received: new Date().toISOString().split('T')[0], notes: '', manual_order_id: null, constructor_id: null });
                     setUseManual(false);
                     onClose();
                 }, 3000);
             }
         } catch (error) {
             console.error('Failed to add payment:', error);
-            alert('Помилка при додаванні платежу');
+            const msg = error.response?.data?.detail || error.message || "Невідома помилка";
+            alert('Помилка при додаванні платежу:\n' + msg);
         }
     };
 
@@ -119,14 +142,26 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Примітка (опціонально)</label>
-                            <input
-                                type="text"
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                                value={formData.notes}
-                                onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                placeholder="Платіж від клієнта..."
-                            />
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Конструктор (Обов'язково)</label>
+                            <select
+                                required={!useManual}
+                                className={`w-full p-3 border rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 ${!formData.constructor_id && !useManual ? 'border-red-300 bg-red-50' : 'bg-slate-50 border-slate-200'}`}
+                                value={formData.constructor_id || ''}
+                                onChange={e => {
+                                    const val = e.target.value ? parseInt(e.target.value) : null;
+                                    setFormData({ ...formData, constructor_id: val });
+                                }}
+                            >
+                                <option value="">-- Оберіть конструктора --</option>
+                                {constructors.map(c => (
+                                    <option key={c.id} value={c.id}>
+                                        👤 {c.full_name || c.username}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-[10px] text-slate-400 mt-1 pl-1">
+                                Кошти будуть розподілені <b>тільки</b> на замовлення обраного конструктора.
+                            </p>
                         </div>
 
                         <div className="border-t pt-4">
@@ -137,7 +172,7 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
                                     onChange={e => setUseManual(e.target.checked)}
                                     className="w-4 h-4 accent-blue-600"
                                 />
-                                <span className="text-sm font-bold text-slate-600">Вказати замовлення вручну</span>
+                                <span className="text-sm font-bold text-slate-600">Або вказати конкретне замовлення вручну</span>
                             </label>
                         </div>
 
@@ -151,7 +186,7 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
                                     onChange={e => setFormData({ ...formData, manual_order_id: parseInt(e.target.value) })}
                                 >
                                     <option value="">Оберіть замовлення</option>
-                                    {orders.map(order => (
+                                    {getFilteredOrders().map(order => (
                                         <option key={order.id} value={order.id}>
                                             #{order.id} - {order.name} (Залишок: {order.remainder_amount.toLocaleString()} ₴)
                                         </option>

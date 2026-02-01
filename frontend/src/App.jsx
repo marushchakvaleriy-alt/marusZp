@@ -143,7 +143,7 @@ function App() {
                 )}
 
                 {currentView === 'users' && (
-                    <UserManagement onBack={() => window.history.back()} />
+                    <UserManagement onBack={() => navigateTo('list')} />
                 )}
 
                 {currentView === 'payments' && (
