@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select, desc
+from sqlalchemy import text
 from database import get_session
 from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead, User, UserCreate, UserRead, UserUpdate
 from payments import Payment, PaymentAllocation, PaymentRead
