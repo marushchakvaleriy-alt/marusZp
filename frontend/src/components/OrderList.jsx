@@ -251,7 +251,12 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             fetchOrders();
         } catch (error) {
             console.error("Failed to create order:", error);
-            alert(error.response?.data?.detail || "Помилка при створенні замовлення");
+            const msg = error.response?.data?.detail || "Помилка при створенні замовлення";
+            if (msg.includes("UndefinedColumn") || msg.includes("does not exist")) {
+                alert("🔴 УВАГА! База даних не оновлена.\n\n👉 Натисніть ЧЕРВОНУ кнопку з ключем (🔧) біля кнопки 'Додати платіж', щоб виправити це автоматично.");
+            } else {
+                alert(msg);
+            }
         }
     };
 
@@ -320,17 +325,17 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     {isAdmin && (
                         <button
                             onClick={async () => {
-                                if (!confirm("Запустити виправлення бази даних?")) return;
+                                if (!confirm("🔧 ОНОВИТИ БАЗУ ДАНИХ?\n\nНатисніть ОК, щоб виправити помилку створення замовлення.")) return;
                                 try {
                                     const res = await api.get('/fix-db');
-                                    alert("Результат:\n" + res.data.logs.join("\n"));
+                                    alert("✅ РЕЗУЛЬТАТ:\n" + res.data.logs.join("\n"));
                                     window.location.reload();
                                 } catch (e) {
-                                    alert("Помилка: " + e.message);
+                                    alert("❌ Помилка: " + e.message);
                                 }
                             }}
-                            className="bg-slate-800 text-white w-10 h-10 rounded-full font-bold shadow-lg hover:bg-slate-700 transition flex items-center justify-center ml-4"
-                            title="Виправити базу даних"
+                            className="bg-red-500 hover:bg-red-600 border-2 border-white text-white w-12 h-12 rounded-full font-bold shadow-xl shadow-red-300 transition flex items-center justify-center ml-4 animate-bounce"
+                            title="ВИПРАВИТИ ПОМИЛКУ БАЗИ ДАНИХ"
                         >
                             🔧
                         </button>
