@@ -39,7 +39,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -58,14 +58,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
         raise credentials_exception
     return user
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
+def get_current_active_user(current_user: User = Depends(get_current_user)):
     # Can add is_active check here if needed
     return current_user
 
-async def get_admin_user(current_user: User = Depends(get_current_active_user)):
+def get_admin_user(current_user: User = Depends(get_current_active_user)):
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Admin privileges required"
+        )
+    return current_user
+
+def get_manager_user(current_user: User = Depends(get_current_active_user)):
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Manager privileges required"
         )
     return current_user

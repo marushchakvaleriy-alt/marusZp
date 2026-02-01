@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { getOrders, getFinancialStats, getDeductions } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const StatCard = ({ title, value, type = 'default', showCurrency = true }) => {
+    // ... (rest of StatCard)
     const styles = {
         default: {
             bg: 'glass-card',
@@ -42,6 +44,11 @@ const StatCard = ({ title, value, type = 'default', showCurrency = true }) => {
 };
 
 const Dashboard = ({ refreshTrigger }) => {
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+
+    // ... (rest of logic)
+
     const [stats, setStats] = useState({
         unpaidAdvances: "0",
         completedOrders: "0",
@@ -51,6 +58,7 @@ const Dashboard = ({ refreshTrigger }) => {
     });
 
     useEffect(() => {
+        // ... (calculation logic)
         const calculateStats = async () => {
             try {
                 const [orders, financialStats, deductions] = await Promise.all([
@@ -59,6 +67,7 @@ const Dashboard = ({ refreshTrigger }) => {
                     getDeductions()
                 ]);
 
+                // ... (logic)
                 let unpaidAdvances = 0;
                 let completedCount = 0;
                 let positiveDebt = 0; // Customer owes technologist
@@ -128,6 +137,8 @@ const Dashboard = ({ refreshTrigger }) => {
         };
         calculateStats();
     }, [refreshTrigger]);
+
+    if (!isAdmin) return null; // Managers/Constructors don't see this dash
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">

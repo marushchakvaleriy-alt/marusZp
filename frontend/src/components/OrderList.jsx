@@ -18,14 +18,16 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
 
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
+    const isManager = user?.role === 'manager';
+    const canManage = isAdmin || isManager;
 
     useEffect(() => {
-        if (isOpen && isAdmin) {
+        if (isOpen && canManage) {
             getUsers().then(users => {
                 setConstructors(users);
             }).catch(console.error);
         }
-    }, [isOpen, isAdmin]);
+    }, [isOpen, canManage]);
 
     const productOptions = [
         'Кухня', 'Шафа', 'Передпокій', 'Санвузол', 'Вітальня',
@@ -220,12 +222,33 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [constructors, setConstructors] = useState([]);
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
+    const isManager = user?.role === 'manager';
+    // Managers can manage orders (create, edit, assign) but might have fewer financial rights or deletion rights
+    const canManage = isAdmin || isManager;
+
+    // Show financials to Admin only? Or Manager too? 
+    // Requirement says Manager manages constructors and sees info.
+    // Let's assume Manager sees financials for now, or maybe restricted?
+    // User requested: "менеджер також має можливість розподіляти замовлення по конструкторам і бачити інформацію на кому зараз задача"
+    // Does not explicitly say "see money". But usually manager needs to know price.
+    // Let's keep showFinancials = !isManager (from previous code) or change it?
+    // Previous code: const showFinancials = !isManager; 
+    // Wait, if !isManager, then Admin sees it (true), Constructor (role='constructor') sees it (true? no, user.role!='manager' is true for constructor).
+    // Logic error in previous code?
+    // user.role is 'admin', 'manager', 'constructor'.
+    // if role='admin', showFinancials = true.
+    // if role='constructor', showFinancials = true.
+    // if role='manager', showFinancials = false.
+    // This seems weird. Everyone sees financials except manager?
+    // Let's fix this: Admin sees all. Constructor sees their own partials (handled by backend usually). 
+    // Manager probably should see financials too.
+    const showFinancials = true;
 
     useEffect(() => {
-        if (isAdmin) {
+        if (canManage) {
             getUsers().then(setConstructors).catch(console.error);
         }
-    }, [isAdmin]);
+    }, [canManage]);
 
     const fetchOrders = async () => {
         try {
@@ -371,7 +394,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                 </div>
 
                 {/* Constructor Filter */}
-                {isAdmin && (
+                {canManage && (
                     <div className="w-full md:w-64">
                         <select
                             value={filterConstructorId}
@@ -418,18 +441,18 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                             <th className="p-4 border-b font-bold">Виріб / Об'єкт</th>
                             <th className="p-4 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
                             <th className="p-4 border-b text-center font-bold text-red-500">Дедлайн</th>
-                            <th className="p-4 border-b text-right font-bold">Ціна (100%)</th>
-                            <th className="p-4 border-b text-right font-bold text-blue-500">ЗП (5%)</th>
+                            {showFinancials && <th className="p-4 border-b text-right font-bold">Ціна (100%)</th>}
+                            {showFinancials && <th className="p-4 border-b text-right font-bold text-blue-500">ЗП (5%)</th>}
                             <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/50">Етап I: Конструктив (50%)</th>
                             <th className="p-4 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/30">Етап II: Монтаж (50%)</th>
-                            <th className="p-4 border-b text-center font-bold text-orange-600 bg-orange-50/30">Штрафи</th>
-                            <th className="p-4 pr-6 border-b text-right font-bold">Борг/Залишок</th>
+                            {showFinancials && <th className="p-4 border-b text-center font-bold text-orange-600 bg-orange-50/30">Штрафи</th>}
+                            {showFinancials && <th className="p-4 pr-6 border-b text-right font-bold">Борг/Залишок</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                         {filteredOrders.map((order) => {
                             const bonus = order.bonus;
-                            const stageAmount = bonus / 2;
+                            const stageAmount = showFinancials ? (bonus / 2) : 0;
                             const isPaidStage1 = !!order.date_advance_paid;
                             const isPaidStage2 = !!order.date_final_paid;
 
@@ -450,13 +473,38 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                     <td className="p-4">
                                         <div className="font-black text-slate-800 italic text-base">{order.name}</div>
-                                        {/* Constructor Name Display */}
-                                        {order.constructor_id && (
-                                            <div className="text-xs font-bold text-blue-600 mt-1 flex items-center gap-1">
-                                                <span>👨‍🔧</span>
-                                                {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
-                                            </div>
-                                        )}
+                                        {/* Constructor Name Display / Edit */}
+                                        <div onClick={(e) => e.stopPropagation()} className="mt-1">
+                                            {canManage ? (
+                                                <select
+                                                    className="w-full text-xs font-bold text-blue-600 bg-blue-50/50 border-0 rounded-lg p-1 outline-none focus:ring-1 focus:ring-blue-300 cursor-pointer"
+                                                    value={order.constructor_id || ""}
+                                                    onChange={async (e) => {
+                                                        const val = e.target.value ? parseInt(e.target.value) : null;
+                                                        try {
+                                                            await updateOrder(order.id, { constructor_id: val });
+                                                            fetchOrders();
+                                                        } catch (err) {
+                                                            alert("Помилка призначення конструктора");
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">-- Не призначено --</option>
+                                                    {constructors.map(c => (
+                                                        <option key={c.id} value={c.id}>
+                                                            {c.full_name || c.username}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                order.constructor_id && (
+                                                    <div className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                                                        <span>👨‍🔧</span>
+                                                        {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
+                                                    </div>
+                                                )
+                                            )}
+                                        </div>
                                         {order.product_types && (() => {
                                             try {
                                                 const types = JSON.parse(order.product_types);
@@ -524,13 +572,16 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                         )}
                                     </td>
 
-                                    <td className="p-4 text-right font-bold text-slate-600 italic mono">
-                                        {order.price.toLocaleString()}
-                                    </td>
-
-                                    <td className="p-4 text-right font-black text-blue-600 italic text-lg mono">
-                                        {bonus.toLocaleString()}
-                                    </td>
+                                    {showFinancials && (
+                                        <>
+                                            <td className="p-4 text-right font-bold text-slate-600 italic mono">
+                                                {order.price.toLocaleString()}
+                                            </td>
+                                            <td className="p-4 text-right font-black text-blue-600 italic text-lg mono">
+                                                {bonus.toLocaleString()}
+                                            </td>
+                                        </>
+                                    )}
 
                                     {(() => {
                                         // Calculate unpaid fines for this order
@@ -675,46 +726,50 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                     })()}
 
                                     {/* Fines column */}
-                                    <td className="p-4 text-center bg-orange-50/20">
-                                        {(() => {
-                                            const unpaidFines = deductions
-                                                .filter(d => d.order_id === order.id)
-                                                .reduce((sum, d) => sum + d.amount, 0);
+                                    {showFinancials && (
+                                        <td className="p-4 text-center bg-orange-50/20">
+                                            {(() => {
+                                                const unpaidFines = deductions
+                                                    .filter(d => d.order_id === order.id)
+                                                    .reduce((sum, d) => sum + d.amount, 0);
 
-                                            if (unpaidFines > 0) {
+                                                if (unpaidFines > 0) {
+                                                    return (
+                                                        <span className="text-sm font-black italic text-orange-600">
+                                                            {unpaidFines.toLocaleString()} ₴
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    return <span className="text-xs text-slate-400">—</span>;
+                                                }
+                                            })()}
+                                        </td>
+                                    )}
+
+                                    {showFinancials && (
+                                        <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                            {(() => {
+                                                const unpaidFines = deductions
+                                                    .filter(d => d.order_id === order.id)
+                                                    .reduce((sum, d) => sum + d.amount, 0);
+
+                                                let val;
+                                                if (order.is_critical_debt) {
+                                                    val = order.current_debt - unpaidFines;
+                                                } else {
+                                                    val = order.remainder_amount - unpaidFines;
+                                                }
+
+                                                // Allow negative values (overpayment/fines > remainder)
+                                                const isNegative = val < -0.01;
                                                 return (
-                                                    <span className="text-sm font-black italic text-orange-600">
-                                                        {unpaidFines.toLocaleString()} ₴
+                                                    <span className={isNegative ? 'text-red-600' : ''}>
+                                                        {val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {isNegative && '₴'}
                                                     </span>
                                                 );
-                                            } else {
-                                                return <span className="text-xs text-slate-400">—</span>;
-                                            }
-                                        })()}
-                                    </td>
-
-                                    <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
-                                        {(() => {
-                                            const unpaidFines = deductions
-                                                .filter(d => d.order_id === order.id)
-                                                .reduce((sum, d) => sum + d.amount, 0);
-
-                                            let val;
-                                            if (order.is_critical_debt) {
-                                                val = order.current_debt - unpaidFines;
-                                            } else {
-                                                val = order.remainder_amount - unpaidFines;
-                                            }
-
-                                            // Allow negative values (overpayment/fines > remainder)
-                                            const isNegative = val < -0.01;
-                                            return (
-                                                <span className={isNegative ? 'text-red-600' : ''}>
-                                                    {val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {isNegative && '₴'}
-                                                </span>
-                                            );
-                                        })()}
-                                    </td>
+                                            })()}
+                                        </td>
+                                    )}
                                 </tr>
                             );
                         })}

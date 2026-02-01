@@ -49,6 +49,17 @@ const UserManagement = ({ onBack }) => {
         }
     };
 
+    const handleDeleteUser = async (id, username) => {
+        if (!window.confirm(`Видалити користувача ${username}?`)) return;
+        try {
+            await api.delete(`/users/${id}`);
+            fetchUsers();
+            alert("Користувача видалено.");
+        } catch (err) {
+            alert(err.response?.data?.detail || "Помилка видалення");
+        }
+    };
+
     if (user.role !== 'admin') {
         return <div className="text-center text-red-500 mt-10">Доступ заборонено</div>;
     }
@@ -123,6 +134,7 @@ const UserManagement = ({ onBack }) => {
                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-blue-500"
                             >
                                 <option value="constructor">Конструктор</option>
+                                <option value="manager">Менеджер</option>
                                 <option value="admin">Адміністратор</option>
                             </select>
                         </div>
@@ -155,8 +167,17 @@ const UserManagement = ({ onBack }) => {
                                     </div>
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${u.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
                                         }`}>
-                                        {u.role === 'admin' ? 'Адмін' : 'Конструктор'}
+                                        {u.role === 'admin' ? 'Адмін' : u.role === 'manager' ? 'Менеджер' : 'Конструктор'}
                                     </span>
+                                    {u.username !== 'admin' && (
+                                        <button
+                                            onClick={() => handleDeleteUser(u.id, u.full_name)}
+                                            className="ml-4 w-8 h-8 flex items-center justify-center bg-red-100 text-red-500 rounded-full hover:bg-red-200 transition"
+                                            title="Видалити"
+                                        >
+                                            🗑️
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>

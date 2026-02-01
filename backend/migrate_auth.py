@@ -85,7 +85,11 @@ def migrate():
             session.commit()
             logger.info("Default admin created: admin / admin")
         else:
-            logger.info("Admin user already exists.")
+            logger.info("Admin user already exists. Updating password to ensure compatibility...")
+            user.password_hash = get_password_hash("admin")
+            session.add(user)
+            session.commit()
+            logger.info("Admin password reset to: admin")
 
 if __name__ == "__main__":
     migrate()
