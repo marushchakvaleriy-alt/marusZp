@@ -153,6 +153,29 @@ def fix_database_schema(session: Session = Depends(get_session)):
     run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS phone_number VARCHAR')
     run_sql('ALTER TABLE user ADD COLUMN phone_number TEXT')
 
+    # 5. Create Default Admin if missing
+    logs.append("Checking for admin user...")
+    try:
+        admin_exists = session.exec(select(User).where(User.username == "admin")).first()
+        if not admin_exists:
+            from auth import get_password_hash
+            from models import User
+            logs.append("Admin not found. Creating default admin...")
+            admin_user = User(
+                username="admin",
+                password_hash=get_password_hash("admin"),
+                full_name="Administrator",
+                role="admin"
+            )
+            session.add(admin_user)
+            session.commit()
+            logs.append("SUCCESS: Created admin / admin")
+        else:
+            logs.append("Admin already exists.")
+    except Exception as e:
+        logs.append(f"FAILED to check/create admin: {str(e)}")
+        session.rollback()
+
     return {"status": "completed", "logs": logs}
 
 @router.get("/logs", response_model=List[ActivityLogRead])

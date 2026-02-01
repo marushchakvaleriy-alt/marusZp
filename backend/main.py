@@ -10,7 +10,8 @@ app = FastAPI(title="TechPay Pro")
 origins = [
     "http://localhost:5173",  # Vite dev server
     "http://localhost:3000",
-    "*"
+    "https://maruszp-frontend.onrender.com", # Production Frontend
+    "https://maruszp.onrender.com", # Production Backend
 ]
 
 app.add_middleware(

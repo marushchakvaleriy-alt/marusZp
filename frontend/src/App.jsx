@@ -139,7 +139,7 @@ function App() {
                 )}
 
                 {currentView === 'detail' && selectedOrder && (
-                    <OrderDetail order={selectedOrder} onBack={() => window.history.back()} onUpdate={handleUpdateOrder} />
+                    <OrderDetail order={selectedOrder} onBack={() => navigateTo('list')} onUpdate={handleUpdateOrder} />
                 )}
 
                 {currentView === 'users' && (
@@ -149,7 +149,7 @@ function App() {
                 {currentView === 'payments' && (
                     <>
                         <button
-                            onClick={() => window.history.back()}
+                            onClick={() => navigateTo('list')}
                             className="mb-6 text-slate-400 hover:text-blue-600 font-bold text-xs uppercase transition"
                         >
                             <i className="fas fa-arrow-left mr-2"></i> Назад до реєстру
@@ -162,7 +162,7 @@ function App() {
                 {currentView === 'deductions' && (
                     <>
                         <button
-                            onClick={() => window.history.back()}
+                            onClick={() => navigateTo('list')}
                             className="mb-6 text-slate-400 hover:text-blue-600 font-bold text-xs uppercase transition"
                         >
                             <i className="fas fa-arrow-left mr-2"></i> Назад до реєстру
@@ -174,7 +174,7 @@ function App() {
                 {currentView === 'activity' && (
                     <>
                         <button
-                            onClick={() => window.history.back()}
+                            onClick={() => navigateTo('list')}
                             className="mb-6 text-slate-400 hover:text-blue-600 font-bold text-xs uppercase transition"
                         >
                             <i className="fas fa-arrow-left mr-2"></i> Назад до реєстру
