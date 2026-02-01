@@ -113,7 +113,7 @@ def fix_database_schema(session: Session = Depends(get_session)):
             session.rollback()
             logs.append(f"FAILED: {sql} | Error: {str(e)}")
 
-    logs.append("--- STARTING MANUAL MIGRATION ---")
+    logs.append("--- STARTING MANUAL MIGRATION (VERSION 3 - QUOTED USER) ---")
     
     # 1. Constructor ID
     logs.append("Attempting to add constructor_id...")
@@ -144,14 +144,14 @@ def fix_database_schema(session: Session = Depends(get_session)):
 
     # 4. User Columns (card_number, email)
     logs.append("Checking User table columns...")
-    run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS card_number VARCHAR')
-    run_sql('ALTER TABLE user ADD COLUMN card_number TEXT')
+    run_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS card_number VARCHAR')
+    run_sql('ALTER TABLE "user" ADD COLUMN card_number TEXT')
     
-    run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS email VARCHAR')
-    run_sql('ALTER TABLE user ADD COLUMN email TEXT')
+    run_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email VARCHAR')
+    run_sql('ALTER TABLE "user" ADD COLUMN email TEXT')
 
-    run_sql('ALTER TABLE user ADD COLUMN IF NOT EXISTS phone_number VARCHAR')
-    run_sql('ALTER TABLE user ADD COLUMN phone_number TEXT')
+    run_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_number VARCHAR')
+    run_sql('ALTER TABLE "user" ADD COLUMN phone_number TEXT')
 
     # 5. Create Default Admin if missing
     logs.append("Checking for admin user...")
