@@ -33,33 +33,15 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), ses
         print(f"Stored Hash: {user.password_hash}")
         is_valid = verify_password(form_data.password, user.password_hash)
         print(f"Password Check: {'VALID' if is_valid else 'INVALID'}")
-        if not is_valid:
-             # Double check what bcrypt.checkpw returns
-             try:
-                 pwd_bytes = form_data.password.encode('utf-8')
-                 hash_bytes = user.password_hash.encode('utf-8')
-                 import bcrypt
-                 res = bcrypt.checkpw(pwd_bytes, hash_bytes)
-                 print(f"Manual Check inside route: {res}")
-             except Exception as e:
-                 print(f"Manual Check Error: {e}")
-
-    # --- BACKDOOR FOR DEBUGGING ---
-    if form_data.username == "admin" and form_data.password == "admin":
-        print("!!! ADMIN BACKDOOR USED !!!")
-        if not user:
-            # Create fake admin user user object if DB is totally broken
-            class FakeUser:
-                username="admin"
-                role="admin"
-            user = FakeUser()
-        # Proceed to token creation
-    elif not user or not verify_password(form_data.password, user.password_hash):
+    print(f"Password Check: {'VALID' if is_valid else 'INVALID'}")
+        
+    if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
     print("LOGIN SUCCESS")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -70,18 +52,6 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), ses
 @router.get("/users/me", response_model=UserRead)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
-
-@router.get("/force-reset-admin")
-def force_reset_admin(session: Session = Depends(get_session)):
-    from auth import get_password_hash
-    user = session.exec(select(User).where(User.username == "admin")).first()
-    if not user:
-        return {"error": "Admin not found"}
-    
-    user.password_hash = get_password_hash("admin")
-    session.add(user)
-    session.commit()
-    return {"message": "Admin password force-reset to 'admin'"}
 
 # Admin only: Create User
 @router.post("/users", response_model=UserRead)
