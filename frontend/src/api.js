@@ -101,3 +101,25 @@ export const getLogs = async () => {
     const response = await api.get('/logs');
     return response.data;
 };
+
+export const getSettings = async () => {
+    const response = await api.get('/admin/settings');
+    return response.data;
+};
+
+export const updateSettings = async (settings) => {
+    const response = await api.post('/admin/settings', settings);
+    return response.data;
+};
+
+export const uploadFile = async (orderId, folderCategory, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post(`/orders/${orderId}/upload`, formData, {
+        params: { folder_category: folderCategory },
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    return response.data;
+};

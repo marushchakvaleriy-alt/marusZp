@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getOrders, createOrder, getDeductions, updateOrder, getUsers, api } from '../api';
 import PaymentModal from './PaymentModal';
+import SettingsModal from './SettingsModal';
 import { useAuth } from '../context/AuthContext';
 
 
@@ -216,6 +217,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [deductions, setDeductions] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [viewMode, setViewMode] = useState('active'); // 'active' or 'archived'
     const [searchQuery, setSearchQuery] = useState('');
     const [filterConstructorId, setFilterConstructorId] = useState('');
@@ -334,6 +336,16 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
                 <h1 className="text-2xl font-black text-slate-800 italic uppercase">Реєстр замовлень</h1>
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-4">
+                    {isAdmin && (
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="bg-slate-700 text-white px-4 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg hover:bg-slate-800 transition flex items-center justify-center gap-2"
+                            title="Налаштування збереження файлів"
+                        >
+                            <i className="fas fa-cog text-lg"></i>
+                        </button>
+                    )}
+
                     <button
                         onClick={() => setIsModalOpen(true)}
                         className="bg-blue-600 text-white px-6 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-blue-200 hover:bg-blue-700 transition flex items-center justify-center gap-2"
@@ -347,26 +359,6 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     >
                         <span className="text-xl">💵</span> Додати платіж
                     </button>
-
-                    {isAdmin && (
-                        <button
-                            onClick={async () => {
-                                if (!confirm("🔧 ОНОВИТИ БАЗУ ДАНИХ?\n\nНатисніть ОК, щоб виправити помилку створення замовлення.")) return;
-                                try {
-                                    const res = await api.get('/fix-db');
-                                    alert("✅ РЕЗУЛЬТАТ:\n" + res.data.logs.join("\n"));
-                                    window.location.reload();
-                                } catch (e) {
-                                    alert("❌ Помилка: " + e.message);
-                                }
-                            }}
-                            className="bg-red-500 hover:bg-red-600 border-2 border-white text-white w-12 h-12 rounded-full font-bold shadow-xl shadow-red-300 transition flex items-center justify-center ml-4 animate-bounce"
-                            title="ВИПРАВИТИ ПОМИЛКУ БАЗИ ДАНИХ"
-                        >
-                            🔧
-                        </button>
-                    )}
-
                 </div>
             </div>
 
@@ -432,6 +424,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     if (onPaymentAdded) onPaymentAdded();
                 }}
             />
+            {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
 
             <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
                 {/* Desktop Table View */}

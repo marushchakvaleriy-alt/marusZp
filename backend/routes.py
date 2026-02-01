@@ -13,6 +13,8 @@ from payments import Payment, PaymentAllocation, PaymentRead
 from payment_service import PaymentDistributionService
 from pydantic import BaseModel
 from auth import get_current_user, get_admin_user, get_manager_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
+from settings import load_settings, save_settings, Settings
+from file_utils import ensure_project_structure, get_file_path, sanitize_filename
 
 router = APIRouter()
 
@@ -141,6 +143,13 @@ def create_order(order: OrderCreate, session: Session = Depends(get_session), cu
         session.add(db_order)
         session.commit()
         session.refresh(db_order)
+        
+        # Auto-create folder structure
+        try:
+            settings = load_settings()
+            ensure_project_structure(db_order.name, settings.storage_path)
+        except Exception as e:
+            print(f"Failed to create folders: {e}")
         
         # Log activity
         log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}' (Автор: {current_user.username})")
@@ -596,3 +605,74 @@ def reset_database(request: ResetRequest, session: Session = Depends(get_session
     log_activity(session, "SYSTEM_RESET", "Всі дані було очищено адміністратором")
     return {"message": "All data has been reset"}
 
+
+# --- ADMIN SETTINGS ---
+@router.get("/admin/settings", response_model=Settings)
+def get_settings(current_user: User = Depends(get_admin_user)):
+    return load_settings()
+
+@router.post("/admin/settings", response_model=Settings)
+def update_settings(settings: Settings, current_user: User = Depends(get_admin_user)):
+    save_settings(settings)
+    return settings
+
+# --- FILE UPLOAD / DOWNLOAD ---
+
+@router.post("/orders/{order_id}/upload")
+async def upload_file(
+    order_id: int, 
+    folder_category: str,
+    file: UploadFile = File(...), 
+    session: Session = Depends(get_session)
+):
+    order = session.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    settings = load_settings()
+    
+    # Ensure structure exists (just in case)
+    ensure_project_structure(order.name, settings.storage_path)
+    
+    # Save file
+    safe_filename = sanitize_filename(file.filename)
+    file_path = get_file_path(order.name, folder_category, safe_filename, settings.storage_path)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+        
+    # Create DB Link
+    # We store a special URL that points to our download endpoint
+    # Format: /api/download/{order_id}/{category}/{filename}
+    download_url = f"/api/download/{order_id}/{folder_category}/{safe_filename}"
+    
+    new_file = OrderFile(
+        order_id=order_id,
+        name=safe_filename,
+        url=download_url,
+        folder_name=folder_category
+    )
+    session.add(new_file)
+    session.commit()
+    session.refresh(new_file)
+    
+    log_activity(session, "UPLOAD_FILE", f"Завантажено файл '{safe_filename}' у '{folder_category}'")
+    return new_file
+
+@router.get("/download/{order_id}/{folder_category}/{filename}")
+def download_file(order_id: int, folder_category: str, filename: str, session: Session = Depends(get_session)):
+    order = session.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    settings = load_settings()
+    safe_filename = sanitize_filename(filename)
+    file_path = get_file_path(order.name, folder_category, safe_filename, settings.storage_path)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on server")
+        
+    return FileResponse(path=file_path, filename=safe_filename)

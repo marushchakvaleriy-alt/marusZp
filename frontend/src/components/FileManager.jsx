@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getFiles, addFileLink, deleteFileLink } from '../api';
+import { getFiles, deleteFileLink, uploadFile } from '../api';
 
 const FileManager = ({ projectId, onBack }) => {
     const [currentFolder, setCurrentFolder] = useState(null);
@@ -7,8 +7,7 @@ const FileManager = ({ projectId, onBack }) => {
     const [loading, setLoading] = useState(false);
 
     // Form state
-    const [newFileName, setNewFileName] = useState('');
-    const [newFileUrl, setNewFileUrl] = useState('');
+    const [newFile, setNewFile] = useState(null);
     const [isAdding, setIsAdding] = useState(false);
 
     const folders = [
@@ -40,21 +39,18 @@ const FileManager = ({ projectId, onBack }) => {
 
     const handleAddLink = async (e) => {
         e.preventDefault();
-        if (!newFileName || !newFileUrl) return;
+        if (!newFile) return;
 
         try {
             setIsAdding(true);
-            await addFileLink(projectId, {
-                name: newFileName,
-                url: newFileUrl,
-                folder_name: currentFolder
-            });
-            setNewFileName('');
-            setNewFileUrl('');
+            await uploadFile(projectId, currentFolder, newFile);
+            setNewFile(null);
+            // Reset file input (trickier with React controlled, but standard input value='' works for simple cases, or just rely on state)
+            e.target.reset();
             await loadFiles();
         } catch (error) {
-            console.error("Failed to add link:", error);
-            alert("Помилка при додаванні посилання");
+            console.error("Failed to upload file:", error);
+            alert("Помилка при завантаженні файлу: " + error.message);
         } finally {
             setIsAdding(false);
         }
@@ -87,37 +83,24 @@ const FileManager = ({ projectId, onBack }) => {
                         </div>
                     </div>
 
-                    {/* Add Link Form */}
+                    {/* Add File Form */}
                     <div className="p-6 border-b border-slate-100 bg-slate-50">
                         <form onSubmit={handleAddLink} className="flex gap-4 items-end flex-wrap md:flex-nowrap">
-                            <div className="flex-1 min-w-[200px]">
-                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Назва файлу</label>
-                                <input
-                                    type="text"
-                                    value={newFileName}
-                                    onChange={(e) => setNewFileName(e.target.value)}
-                                    placeholder="Напр. Кухня План версія 1"
-                                    className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-500 outline-none text-sm font-bold text-slate-700"
-                                    required
-                                />
-                            </div>
                             <div className="flex-[2] min-w-[200px]">
-                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Посилання (Google Drive/Docs)</label>
+                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Виберіть файл</label>
                                 <input
-                                    type="url"
-                                    value={newFileUrl}
-                                    onChange={(e) => setNewFileUrl(e.target.value)}
-                                    placeholder="https://drive.google.com/..."
-                                    className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-500 outline-none text-sm font-bold text-slate-700"
+                                    type="file"
+                                    onChange={(e) => setNewFile(e.target.files[0])}
+                                    className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-blue-500 outline-none text-sm font-bold text-slate-700 bg-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                                     required
                                 />
                             </div>
                             <button
                                 type="submit"
-                                disabled={isAdding}
+                                disabled={isAdding || !newFile}
                                 className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition disabled:opacity-50 h-[42px]"
                             >
-                                {isAdding ? '...' : <><i className="fas fa-link mr-2"></i> Додати посилання</>}
+                                {isAdding ? 'Завантаження...' : <><i className="fas fa-cloud-upload-alt mr-2"></i> Завантажити файл</>}
                             </button>
                         </form>
                     </div>
@@ -135,12 +118,18 @@ const FileManager = ({ projectId, onBack }) => {
                                 <div key={file.id} className="flex justify-between items-center p-4 hover:bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 transition group">
                                     <div className="flex items-center gap-4 overflow-hidden">
                                         <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center font-black text-xl shrink-0">
-                                            <i className="fab fa-google-drive"></i>
+                                            <i className="fas fa-file-download"></i>
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-sm font-bold text-slate-700 truncate">{file.name}</p>
-                                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:text-blue-600 font-bold uppercase italic truncate block hover:underline">
-                                                {file.url}
+                                            <a
+                                                href={file.url.startsWith('/') ? `http://localhost:8000${file.url}` : file.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                download={file.url.startsWith('/')}
+                                                className="text-[10px] text-blue-400 hover:text-blue-600 font-bold uppercase italic truncate block hover:underline"
+                                            >
+                                                {file.url.startsWith('/') ? 'Завантажити файл' : file.url}
                                             </a>
                                         </div>
                                     </div>
