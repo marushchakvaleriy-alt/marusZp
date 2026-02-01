@@ -138,7 +138,8 @@ const Dashboard = ({ refreshTrigger }) => {
         calculateStats();
     }, [refreshTrigger]);
 
-    if (!isAdmin) return null; // Managers/Constructors don't see this dash
+    // if (!isAdmin) return null; // Managers/Constructors NOW see this dash per request
+    if (!user) return null;
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">

@@ -541,54 +541,29 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
     from payments import Payment, PaymentAllocation
     
     try:
-        # If Admin - Global Stats
-        if current_user.role == 'admin':
-            total_received = session.exec(select(func.sum(Payment.amount))).one()
-            total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
-            total_deductions = session.exec(select(func.sum(Deduction.amount)).where(Deduction.is_paid == False)).one()
-            
-            if total_received is None: total_received = 0.0
-            if total_allocated is None: total_allocated = 0.0
-            if total_deductions is None: total_deductions = 0.0
-            
-            unallocated = total_received - total_allocated
-            
-            return {
-                "total_received": total_received,
-                "total_allocated": total_allocated,
-                "unallocated": unallocated,
-                "total_deductions": total_deductions
-            }
+        # Global Stats for everyone (Admin, Manager, Constructor)
+        # As per user request: "constructors ... should see figures of general debt and undistributed funds"
+        total_received = session.exec(select(func.sum(Payment.amount))).one()
+        total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
+        # Count all unpaid deductions as "Total Debt" (or use calculated net debt?)
+        # Logic in frontend uses complex calc for "Total Debt". Backend just sends raw numbers usually?
+        # Wait, get_financial_stats sends "total_deductions". Frontend calculates "Total Debt" from ORDERS.
+        # So backend just needs to return valid global numbers for 'unallocated'.
         
-        else:
-            # Constructor - ONLY THEIR OWN TOTALS
-            # This is tricky because payments are global. 
-            # We will show sum of 'price' of their assigned orders as a proxy? 
-            # OR show sum of allocations to THEIR orders.
-            
-            # Show sum of allocations to their orders (Actual money earned/allocated)
-            my_allocations = session.exec(
-                select(func.sum(PaymentAllocation.amount))
-                .join(Order)
-                .where(Order.constructor_id == current_user.id)
-            ).one()
-            
-            # Show total price of their projects
-            my_projects_value = session.exec(
-                select(func.sum(Order.price))
-                .where(Order.constructor_id == current_user.id)
-            ).one()
-
-            if my_allocations is None: my_allocations = 0.0
-            if my_projects_value is None: my_projects_value = 0.0
-            
-            # Constructors shouldn't see 'unallocated' company money.
-            return {
-                "total_received": my_allocations, # Re-label for UI reuse
-                "total_allocated": my_projects_value * 0.05, # Bonus potential? Or just 0
-                "unallocated": 0.0,
-                "total_deductions": 0.0 # Or specific fines
-            }
+        total_deductions = session.exec(select(func.sum(Deduction.amount)).where(Deduction.is_paid == False)).one()
+        
+        if total_received is None: total_received = 0.0
+        if total_allocated is None: total_allocated = 0.0
+        if total_deductions is None: total_deductions = 0.0
+        
+        unallocated = total_received - total_allocated
+        
+        return {
+            "total_received": total_received,
+            "total_allocated": total_allocated,
+            "unallocated": unallocated,
+            "total_deductions": total_deductions
+        }
 
     except Exception as e:
         print(f"Error calculating stats: {e}")
