@@ -144,14 +144,33 @@ def fix_database_schema(session: Session = Depends(get_session)):
 
     # 4. User Columns (card_number, email)
     logs.append("Checking User table columns...")
-    run_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS card_number VARCHAR')
-    run_sql('ALTER TABLE "user" ADD COLUMN card_number TEXT')
     
-    run_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email VARCHAR')
-    run_sql('ALTER TABLE "user" ADD COLUMN email TEXT')
-
-    run_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_number VARCHAR')
-    run_sql('ALTER TABLE "user" ADD COLUMN phone_number TEXT')
+    # Try multiple variants for the table name
+    user_variants = ['"user"', 'public."user"', 'user']
+    
+    for variant in user_variants:
+        try:
+            logs.append(f"Trying table name: {variant}")
+            # Use distinct run for each column to avoid one failure blocking others
+            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS card_number VARCHAR'))
+            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS email VARCHAR'))
+            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS phone_number VARCHAR'))
+            session.commit()
+            logs.append(f"SUCCESS with {variant}")
+            break # Stop if one worked
+        except Exception as e:
+            session.rollback()
+            logs.append(f"Failed with {variant}: {str(e)}")
+            
+    # Also add text columns separately just in case
+    try:
+        variant = '"user"' # Most likely correct
+        session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN card_number TEXT'))
+        session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN email TEXT'))
+        session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN phone_number TEXT'))
+        session.commit()
+    except:
+        session.rollback()
 
     # 5. Create Default Admin if missing
     logs.append("Checking for admin user...")
