@@ -401,7 +401,17 @@ def delete_order(order_id: int, session: Session = Depends(get_session)):
     
     # Manually delete orphans just in case
     from sqlalchemy import text
-    session.exec(text(f"DELETE FROM deduction WHERE order_id = {order_id}"))
+    try:
+        session.exec(text(f"DELETE FROM deduction WHERE order_id = {order_id}")) # Fines
+        session.exec(text(f"DELETE FROM paymentallocation WHERE order_id = {order_id}")) # Allocations
+        session.exec(text(f"DELETE FROM orderfile WHERE order_id = {order_id}")) # Files
+        
+        # Unlink manual payments (don't delete the money, just unlink order)
+        session.exec(text(f"UPDATE payment SET manual_order_id = NULL WHERE manual_order_id = {order_id}"))
+        session.commit()
+    except Exception as e:
+        print(f"Error cleaning up order dependencies: {e}")
+        session.rollback()
 
     session.delete(db_order)
     session.commit()
