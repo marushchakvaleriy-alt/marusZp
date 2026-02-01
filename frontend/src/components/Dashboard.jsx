@@ -124,9 +124,14 @@ const Dashboard = ({ refreshTrigger }) => {
                 setStats({
                     totalOrders: orders.length.toLocaleString(),
                     completedOrders: completedCount.toLocaleString(),
+                    // Use backend-provided global sums if available, or keep local calc for now but mapped correctly
+                    // Actually, backend get_financial_stats lacks global debt sum. 
+                    // I will fix backend first, then come back here.
+                    // But to save turn, I will assume financialStats WILL have 'total_debt' after my next edit.
+                    // Let's implement robust fallback.
                     totalBalance: totalBalance.toLocaleString(),
-                    totalDebt: netDebt.toLocaleString(),
-                    totalDeductions: totalDeductions.toLocaleString(),
+                    totalDebt: (financialStats.total_debt || netDebt).toLocaleString(), // Prefer backend
+                    totalDeductions: (financialStats.total_deductions || totalDeductions).toLocaleString(), // Prefer backend
                     unpaidAdvances: unpaidAdvances.toLocaleString(),
                     customerBalance: customerBalance.toLocaleString(),
                     unallocatedFunds: (financialStats.unallocated + customerBalance).toLocaleString(),
@@ -137,47 +142,48 @@ const Dashboard = ({ refreshTrigger }) => {
             }
         };
         calculateStats();
-    }, [refreshTrigger]);
+        // ... This step requires backend update first
+        // I will verify backend code first.
 
-    // if (!isAdmin) return null; // Managers/Constructors NOW see this dash per request
-    if (!user) return null;
+        // if (!isAdmin) return null; // Managers/Constructors NOW see this dash per request
+        if (!user) return null;
 
-    return (
-        <div className="space-y-6 mb-10">
-            {/* Global Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
-                <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
-            </div>
+        return (
+            <div className="space-y-6 mb-10">
+                {/* Global Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
+                    <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
+                </div>
 
-            {/* Per-Constructor Stats (Admin Only) */}
-            {isAdmin && stats.constructorStats && stats.constructorStats.length > 0 && (
-                <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
-                    <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest pl-2">По конструкторах</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {stats.constructorStats.map(c => (
-                            <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
-                                <p className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-                                    {c.name}
-                                </p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <p className="text-[10px] text-red-300 font-bold uppercase">Борг</p>
-                                        <p className="text-lg font-black text-red-500">{c.debt.toLocaleString()}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] text-yellow-300 font-bold uppercase">Вільні</p>
-                                        <p className="text-lg font-black text-yellow-600">{c.unallocated.toLocaleString()}</p>
+                {/* Per-Constructor Stats (Admin Only) */}
+                {isAdmin && stats.constructorStats && stats.constructorStats.length > 0 && (
+                    <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
+                        <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest pl-2">По конструкторах</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {stats.constructorStats.map(c => (
+                                <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
+                                    <p className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                                        {c.name}
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <p className="text-[10px] text-red-300 font-bold uppercase">Борг</p>
+                                            <p className="text-lg font-black text-red-500">{c.debt.toLocaleString()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-yellow-300 font-bold uppercase">Вільні</p>
+                                            <p className="text-lg font-black text-yellow-600">{c.unallocated.toLocaleString()}</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
-    );
-};
+                )}
+            </div>
+        );
+    };
 
-export default Dashboard;
+    export default Dashboard;

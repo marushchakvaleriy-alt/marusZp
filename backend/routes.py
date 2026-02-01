@@ -667,12 +667,18 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
         
         unallocated = total_received - total_allocated
         
+        
+        # Calculate Global Total Debt (Sum of all constructor net debts)
+        # We need to iterate all constructors first
+        
         # Per-Constructor Stats
         constructors_stats = []
         constructors = session.exec(select(User).where(User.role == 'constructor')).all()
         
+        global_total_debt = 0.0
+        
         for c in constructors:
-            # 1. Undistributed (Payments tagged for them - Allocations linked to those payments)
+            # 1. Undistributed
             c_payments = session.exec(select(Payment).where(Payment.constructor_id == c.id)).all()
             c_total_received = sum(p.amount for p in c_payments)
             
@@ -689,7 +695,6 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             c_unallocated = c_total_received - c_total_allocated
             
             # 2. Debt (Unpaid salary for their orders)
-            # Find all orders for this constructor
             c_orders = session.exec(select(Order).where(Order.constructor_id == c.id)).all()
             c_debt = 0.0
             
@@ -703,14 +708,12 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
                 final_remaining = max(0, final_amount - o.final_paid_amount)
                 
                 order_current_debt = 0.0
-                # If work started (phase 1) but not fully paid
                 if o.date_to_work and advance_remaining > 0.01:
                      order_current_debt += advance_remaining
-                # If installation done (phase 2) but not fully paid
                 if o.date_installation and final_remaining > 0.01:
                      order_current_debt += final_remaining
                 
-                # Deduct unpaid fines for this order
+                # Deduct unpaid fines
                 unpaid_fines = session.exec(
                     select(func.sum(Deduction.amount))
                     .where(Deduction.order_id == o.id)
@@ -718,15 +721,22 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
                 ).one() or 0.0
                 
                 # Net debt for this order (salary - fines)
-                # If fines > salary, debt is 0 (it becomes negative balance, but here we track Debt we OWE)
-                # Actually, strictly speaking "Debt" card usually shows what we owe.
-                c_debt += max(0, order_current_debt - unpaid_fines)
+                # Allow NEGATIVE debt (User owes company) to subtract from total
+                # Previously: max(0, ...)
+                c_debt += (order_current_debt - unpaid_fines)
 
+            # Add to global sum (only if positive? No, net it out!)
+            # Actually, "Total Debt" usually implies "How much WE have to pay out".
+            # If a constructor has negative debt (owes us), it reduces our valid liability?
+            # Or should it be treated as 0 liablity and separate Receivable?
+            # User expectation seems to be simpler NET math.
+            global_total_debt += max(0, c_debt) # Global debt is what WE OWE. If he owes us, we owe 0.
+            
             constructors_stats.append({
                 "id": c.id,
                 "name": c.full_name or c.username,
                 "unallocated": c_unallocated,
-                "debt": c_debt
+                "debt": c_debt # Can be negative now
             })
         
         return {
@@ -734,6 +744,7 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             "total_allocated": total_allocated,
             "unallocated": unallocated,
             "total_deductions": total_deductions,
+            "total_debt": global_total_debt, # New field for frontend
             "constructors_stats": constructors_stats
         }
 
