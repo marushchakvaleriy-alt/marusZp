@@ -159,7 +159,7 @@ def fix_database_schema(session: Session = Depends(get_session)):
         admin_exists = session.exec(select(User).where(User.username == "admin")).first()
         if not admin_exists:
             from auth import get_password_hash
-            from models import User
+            # User is already imported globally
             logs.append("Admin not found. Creating default admin...")
             admin_user = User(
                 username="admin",
