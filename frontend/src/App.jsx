@@ -93,7 +93,9 @@ function App() {
                         <Dashboard refreshTrigger={statsRefreshKey} />
                         <div className="mb-6 flex justify-end gap-3 flex-wrap items-center">
                             <div className="mr-auto flex items-center gap-2">
-                                <span className="text-slate-500 font-bold">{user.username} ({user.role === 'admin' ? 'Адмін' : 'Конструктор'})</span>
+                                <span className="text-slate-500 font-bold">
+                                    {user.username} ({user.role === 'admin' ? 'Адмін' : user.role === 'manager' ? 'Менеджер' : 'Конструктор'})
+                                </span>
                                 <button onClick={logout} className="text-red-500 hover:text-red-700 text-sm font-bold underline">Вийти</button>
                             </div>
 

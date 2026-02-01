@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import logoGif from '../assets/videos/MHata1.gif';
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -25,10 +26,18 @@ const Login = () => {
         <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-black text-slate-800 italic uppercase">
+                    {/* Animated GIF Logo */}
+                    <div className="relative w-full mx-auto mb-6">
+                        <img
+                            src={logoGif}
+                            alt="Logo"
+                            className="w-full h-auto object-contain mx-auto drop-shadow-xl"
+                        />
+                    </div>
+
+                    <h1 className="text-3xl font-black text-slate-800 italic uppercase tracking-tight">
                         Вхід у систему
                     </h1>
-                    <p className="text-slate-400 text-sm mt-2">MARUS ZP MANAGER</p>
                 </div>
 
                 {error && (

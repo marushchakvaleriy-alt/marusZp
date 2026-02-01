@@ -224,7 +224,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const isAdmin = user?.role === 'admin';
     const isManager = user?.role === 'manager';
     // Managers can manage orders (create, edit, assign) but might have fewer financial rights or deletion rights
-    const canManage = isAdmin || isManager;
+    // Managers can manage orders, but double check role isn't constructor or undefined
+    const canManage = (isAdmin || isManager) && user?.role !== 'constructor';
 
     // Show financials to Admin only? Or Manager too? 
     // Requirement says Manager manages constructors and sees info.
