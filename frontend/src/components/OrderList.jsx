@@ -241,8 +241,10 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     };
 
     useEffect(() => {
-        fetchOrders();
-    }, [refreshTrigger]);
+        if (user) {
+            fetchOrders();
+        }
+    }, [refreshTrigger, user]);
 
     const handleCreate = async (newOrder) => {
         try {
