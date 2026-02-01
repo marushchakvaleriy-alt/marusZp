@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 SETTINGS_FILE = "settings.json"
 DEFAULT_SETTINGS = {
-    "storage_path": "C:\\TechPay_Projects"
+    "storage_path": "C:\\TechPay_Projects" if os.name == 'nt' else "uploads"
 }
 
 class Settings(BaseModel):

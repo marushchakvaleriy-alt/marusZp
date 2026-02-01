@@ -142,22 +142,21 @@ const Dashboard = ({ refreshTrigger }) => {
             }
         };
         calculateStats();
-        // ... This step requires backend update first
-        // I will verify backend code first.
+    }, [refreshTrigger]);
 
-        // if (!isAdmin) return null; // Managers/Constructors NOW see this dash per request
-        if (!user) return null;
+    if (!user) return null;
 
-        return (
-            <div className="space-y-6 mb-10">
-                {/* Global Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
-                    <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
-                </div>
+    return (
+        <div className="space-y-6 mb-10">
+            {/* Global Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
+                <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
+            </div>
 
-                {/* Per-Constructor Stats (Admin Only) */}
-                {isAdmin && stats.constructorStats && stats.constructorStats.length > 0 && (
+            {/* Per-Constructor Stats (Admin Only) */}
+            {
+                isAdmin && stats.constructorStats && stats.constructorStats.length > 0 && (
                     <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
                         <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest pl-2">По конструкторах</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -181,9 +180,10 @@ const Dashboard = ({ refreshTrigger }) => {
                             ))}
                         </div>
                     </div>
-                )}
-            </div>
-        );
-    };
+                )
+            }
+        </div >
+    );
+};
 
-    export default Dashboard;
+export default Dashboard;
