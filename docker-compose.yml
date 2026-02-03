@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Database Service
+  db:
+    image: postgres:15-alpine
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-root}
+      POSTGRES_DB: ${POSTGRES_DB:-mebeldb}
+    ports:
+      - "5432:5432"
+
+  # Backend Service
+  backend:
+    build: 
+      context: ./backend
+    restart: always
+    depends_on:
+      - db
+    volumes:
+      - ./backend/uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-root}@db:5432/${POSTGRES_DB:-mebeldb}
+      SECRET_KEY: ${SECRET_KEY:-supersecretkeyCHANGE_ME}
+      # On Linux/Docker, storage path is just "uploads"
+      STORAGE_PATH: uploads
+
+  # Frontend Service
+  frontend:
+    build: 
+      context: ./frontend
+      args:
+        # IMPORTANT: This must be the PUBLIC IP or Domain of your server
+        # Because the browser (user's PC) needs to know where to find the API.
+        # Docker internal names (like http://backend:8000) DO NOT work for the browser.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    restart: always
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

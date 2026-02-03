@@ -476,14 +476,18 @@ def delete_payment(payment_id: int, session: Session = Depends(get_session)):
     
     # --- RESET WORLD STRATEGY ---
     # 1. Clear all allocations
-    from sqlalchemy import text
-    session.exec(text("DELETE FROM paymentallocation"))
+    from sqlalchemy import delete, update
+    session.exec(delete(PaymentAllocation))
     
     # 2. Reset order paid amounts and dates
-    # We set them to 0 and NULL.
-    # Note: If there are other sources of payments (e.g. deductions paid via other means?), this might correspond to only payments handled here.
-    # Assuming all "advance/final" payments come through Payment system.
-    session.exec(text("UPDATE \"order\" SET advance_paid_amount = 0, final_paid_amount = 0, date_advance_paid = NULL, date_final_paid = NULL"))
+    # We set them to 0 and NULL using ORM to handle table naming safely
+    statement = update(Order).values(
+        advance_paid_amount=0,
+        final_paid_amount=0,
+        date_advance_paid=None,
+        date_final_paid=None
+    )
+    session.exec(statement)
     
     session.commit()
     
