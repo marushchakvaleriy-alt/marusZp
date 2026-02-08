@@ -9,8 +9,8 @@ export const resetDatabase = async (password) => {
     return response.data;
 };
 
-export const getOrders = async () => {
-    const response = await api.get('/orders/');
+export const getOrders = async (params = {}) => {
+    const response = await api.get('/orders/', { params });
     return response.data;
 };
 

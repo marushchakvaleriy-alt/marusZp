@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select, desc, asc
 from sqlalchemy import text
 from database import get_session
 from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead, User, UserCreate, UserRead, UserUpdate
@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from auth import get_current_user, get_admin_user, get_manager_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 from settings import load_settings, save_settings, Settings
 from file_utils import ensure_project_structure, get_file_path, sanitize_filename
+from telegram_service import TelegramService
 
 router = APIRouter()
 
@@ -155,6 +156,7 @@ def fix_database_schema(session: Session = Depends(get_session)):
             session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS card_number VARCHAR'))
             session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS email VARCHAR'))
             session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS phone_number VARCHAR'))
+            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS telegram_id VARCHAR'))
             session.commit()
             logs.append(f"SUCCESS with {variant}")
             break # Stop if one worked
@@ -226,7 +228,25 @@ def create_order(order: OrderCreate, session: Session = Depends(get_session), cu
         
         # Log activity
         log_activity(session, "CREATE_ORDER", f"Створено замовлення #{db_order.id} '{db_order.name}' (Автор: {current_user.username})")
-        return OrderRead.from_order(db_order)
+        
+        # Get constructor for configuration
+        constructor = session.get(User, db_order.constructor_id) if db_order.constructor_id else None
+        
+        # 🟢 CRITICAL FIX: Freeze stage settings at creation time
+        # If constructor exists, copy their current stage settings to the order
+        if constructor:
+            # Only set if not already provided in the request
+            if db_order.custom_stage1_percent is None:
+                db_order.custom_stage1_percent = constructor.payment_stage1_percent
+            
+            if db_order.custom_stage2_percent is None:
+                db_order.custom_stage2_percent = constructor.payment_stage2_percent
+            
+            session.add(db_order)
+            session.commit()
+            session.refresh(db_order)
+
+        return OrderRead.from_order(db_order, constructor)
     except Exception as e:
         session.rollback()
         print(f"ERROR CREATING ORDER: {e}")
@@ -239,6 +259,8 @@ def read_orders(
     skip: int = 0, 
     limit: int = 100, 
     search: Optional[str] = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -258,13 +280,35 @@ def read_orders(
             else:
                 query = query.where(Order.name.contains(search))
         
-        # Sort by ID descending (newest first)
-        query = query.order_by(desc(Order.id))
+        # Sorting
+        sort_col = Order.id
+        if sort_by == "name":
+            sort_col = Order.name
+        
+        if sort_order == "desc":
+            query = query.order_by(desc(sort_col))
+        else:
+            query = query.order_by(asc(sort_col))
+
         query = query.offset(skip).limit(limit)
         
         orders = session.exec(query).all()
         # Convert using the logic-heavy from_order method
-        return [OrderRead.from_order(o) for o in orders]
+        # Return list with constructor-aware bonus calculation
+        result = []
+        for o in orders:
+            constructor = None
+            if o.constructor_id:
+                # FORCE REFRESH: Use populate_existing=True to bypass session cache completely
+                # This ensures we get the latest payment_stage percentages from DB
+                constructor = session.exec(
+                    select(User)
+                    .where(User.id == o.constructor_id)
+                    .execution_options(populate_existing=True)
+                ).first()
+            
+            result.append(OrderRead.from_order(o, constructor))
+        return result
     except Exception as e:
         print(f"ERROR READING ORDERS: {e}")
         return []
@@ -320,7 +364,8 @@ def read_order(order_id: int, session: Session = Depends(get_session)):
     order = session.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    return OrderRead.from_order(order)
+    constructor = session.get(User, order.constructor_id) if order.constructor_id else None
+    return OrderRead.from_order(order, constructor)
 
 @router.patch("/orders/{order_id}", response_model=OrderRead)
 def update_order(
@@ -375,6 +420,22 @@ def update_order(
         if key != "id": # Skip ID as handled above
             setattr(db_order, key, value)
     
+    # 🟢 CRITICAL FIX: If constructor changed, update stage defaults
+    # This ensures new settings apply when assigning a constructor later
+    if "constructor_id" in order_data:
+        new_constructor_id = order_data["constructor_id"]
+        if new_constructor_id:
+            new_constructor = session.get(User, new_constructor_id)
+            if new_constructor:
+                # Only if not manually overriding in this same update (although UserUpdate doesn't support custom stages yet usually)
+                # And if current order doesn't have custom stages?
+                # Actually, simpler: If assigning new constructor, RESET to their defaults.
+                # If manager wants custom, they'd have to set it separately.
+                # But to be safe, only set if they are currently None or if we assume reassignment means "use new defaults"
+                # Let's overwrite to be safe and ensure 100/0 applies.
+                db_order.custom_stage1_percent = new_constructor.payment_stage1_percent
+                db_order.custom_stage2_percent = new_constructor.payment_stage2_percent
+    
     session.add(db_order)
     session.commit()
     session.refresh(db_order)
@@ -389,7 +450,8 @@ def update_order(
     
     log_activity(session, "UPDATE_ORDER", f"Оновлено замовлення #{order_id} (Користувач: {current_user.username})")
     
-    return OrderRead.from_order(db_order)
+    constructor = session.get(User, db_order.constructor_id) if db_order.constructor_id else None
+    return OrderRead.from_order(db_order, constructor)
 
 @router.delete("/orders/{order_id}")
 def delete_order(order_id: int, session: Session = Depends(get_session)):
@@ -446,6 +508,19 @@ def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_s
         remaining = payment.amount - used
         
         log_activity(session, "ADD_PAYMENT", f"Додано платіж {payment.amount} грн")
+        
+        # Notify Constructors regarding allocations
+        try:
+            ts = TelegramService()
+            for alloc in allocations:
+                order = session.get(Order, alloc.get("order_id")) # Alloc dict from service
+                if order and order.constructor_id:
+                    constructor = session.get(User, order.constructor_id)
+                    if constructor:
+                         ts.notify_payment(payment, alloc.get("amount"), order.name, constructor)
+        except Exception as e:
+             print(f"Failed to send payment notifications: {e}")
+
         return {
             "payment_id": payment.id,
             "allocations": allocations,
@@ -474,27 +549,50 @@ def delete_payment(payment_id: int, session: Session = Depends(get_session)):
     session.delete(payment)
     session.commit()
     
-    # --- RESET WORLD STRATEGY ---
-    # 1. Clear all allocations
-    from sqlalchemy import delete, update
-    session.exec(delete(PaymentAllocation))
+    # --- TARGETED UNDO STRATEGY ---
+    # Instead of resetting everything, we only undo THIS payment's effect.
     
-    # 2. Reset order paid amounts and dates
-    # We set them to 0 and NULL using ORM to handle table naming safely
-    statement = update(Order).values(
-        advance_paid_amount=0,
-        final_paid_amount=0,
-        date_advance_paid=None,
-        date_final_paid=None
-    )
-    session.exec(statement)
+    # 1. Find what this payment paid for
+    allocations = session.exec(
+        select(PaymentAllocation).where(PaymentAllocation.payment_id == payment_id)
+    ).all()
     
+    for alloc in allocations:
+        # Get the order
+        order = session.get(Order, alloc.order_id)
+        if not order:
+            continue
+            
+        # Calculate totals to check if we need to remove "Paid" date
+        bonus = order.price * 0.05
+        advance_required = bonus * 0.5
+        final_required = bonus * 0.5
+        
+        # Revert amounts
+        if alloc.stage == 'advance':
+            order.advance_paid_amount = max(0, order.advance_paid_amount - alloc.amount)
+            # If now less than required, remove date
+            if order.advance_paid_amount < (advance_required - 0.01):
+                order.date_advance_paid = None
+                
+        elif alloc.stage == 'final':
+            order.final_paid_amount = max(0, order.final_paid_amount - alloc.amount)
+            # If now less than required, remove date
+            if order.final_paid_amount < (final_required - 0.01):
+                order.date_final_paid = None
+                
+        session.add(order)
+        # Delete this allocation record
+        session.delete(alloc)
+        
+    # 2. Finally delete the payment itself
+    session.delete(payment)
     session.commit()
     
-    # 3. Recalculate everything
-    PaymentDistributionService.distribute_all_unallocated(session)
+    # 3. NO redistribution. 
+    # Whatever happened is done. If holes appeared, they stay as debt.
     
-    log_activity(session, "DELETE_PAYMENT", f"Видалено платіж {amount} грн від {date_} і перераховано баланси")
+    log_activity(session, "DELETE_PAYMENT", f"Видалено платіж {amount} грн від {date_} (Точкове скасування)")
     return {"ok": True}
 
 @router.get("/payments/", response_model=List[PaymentRead])
@@ -606,6 +704,16 @@ def create_deduction(deduction_data: DeductionCreate, session: Session = Depends
     session.refresh(deduction)
     
     order = session.get(Order, deduction.order_id)
+    
+    # Notify Constructor about Fine
+    if order.constructor_id:
+        constructor = session.get(User, order.constructor_id)
+        if constructor:
+            try:
+                TelegramService().notify_deduction(deduction, order.name, constructor)
+            except Exception as e:
+                print(f"Failed to send deduction notification: {e}")
+
     log_activity(session, "ADD_DEDUCTION", f"Додано штраф {deduction.amount} грн для замовлення '{order.name}'")
     return DeductionRead.from_deduction(deduction, order.name)
 
@@ -713,10 +821,42 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             c_debt = 0.0
             
             for o in c_orders:
-                # Calculate debt logic same as OrderRead
-                bonus = o.price * 0.05
-                advance_amount = bonus * 0.5
-                final_amount = bonus * 0.5
+                # Calculate bonus using same logic as OrderRead.from_order
+                if o.fixed_bonus is not None:
+                    # Manager override: use exact fixed amount
+                    bonus = o.fixed_bonus
+                elif c and hasattr(c, 'salary_mode') and hasattr(c, 'salary_percent'):
+                    # Calculate based on constructor's salary configuration
+                    if c.salary_mode == 'fixed_amount':
+                        # Fixed amount per order
+                        bonus = c.salary_percent
+                    elif c.salary_mode == 'materials_percent':
+                        # Calculate from material cost
+                        bonus = (o.material_cost or 0) * (c.salary_percent / 100)
+                    else:
+                        # Default: calculate from sales price (sales_percent)
+                        bonus = o.price * (c.salary_percent / 100)
+                else:
+                    # Fallback to old logic (5% of sales price)
+                    bonus = o.price * 0.05
+                
+                # Determine stage distribution percentages
+                if o.custom_stage1_percent is not None:
+                    # Per-order override
+                    stage1_pct = o.custom_stage1_percent
+                    stage2_pct = o.custom_stage2_percent if o.custom_stage2_percent is not None else (100 - stage1_pct)
+                elif c and hasattr(c, 'payment_stage1_percent'):
+                    # Use constructor's default stage distribution
+                    stage1_pct = c.payment_stage1_percent
+                    stage2_pct = c.payment_stage2_percent
+                else:
+                    # Fallback: 50/50
+                    stage1_pct = 50.0
+                    stage2_pct = 50.0
+                
+                # Calculate stage amounts
+                advance_amount = bonus * (stage1_pct / 100)
+                final_amount = bonus * (stage2_pct / 100)
                 
                 advance_remaining = max(0, advance_amount - o.advance_paid_amount)
                 final_remaining = max(0, final_amount - o.final_paid_amount)
@@ -864,3 +1004,57 @@ def download_file(order_id: int, folder_category: str, filename: str, session: S
         raise HTTPException(status_code=404, detail="File not found on server")
         
     return FileResponse(path=file_path, filename=safe_filename)
+
+@router.get("/debug/force_fix")
+def debug_force_fix(session: Session = Depends(get_session)):
+    report = []
+    try:
+        # 1. Check Marushchak
+        query = select(User).where(User.full_name.contains("арущак"))
+        user = session.exec(query).first()
+        
+        if user:
+            report.append(f"Found User: {user.full_name} (ID: {user.id})")
+            report.append(f"CURRENT DB SETTINGS: Stage1={user.payment_stage1_percent}%, Stage2={user.payment_stage2_percent}%")
+            
+            if user.payment_stage1_percent != 100.0:
+                report.append("❌ Settings are WRONG! Forcing update...")
+                user.payment_stage1_percent = 100.0
+                user.payment_stage2_percent = 0.0
+                session.add(user)
+                session.commit()
+                session.refresh(user)
+                report.append(f"✅ UPDATED TO: Stage1={user.payment_stage1_percent}%, Stage2={user.payment_stage2_percent}%")
+            else:
+                report.append("✅ Settings are ALREADY CORRECT (100/0).")
+                
+            # Double check with a test query
+            check = session.get(User, user.id)
+            report.append(f"VERIFICATION READ: Stage1={check.payment_stage1_percent}%")
+            
+        else:
+            report.append("❌ User 'Marushchak' NOT FOUND!")
+
+        # 2. Check Order #17
+        try:
+            o17 = session.get(Order, 17)
+            if o17:
+                report.append(f"Order #17: Custom1={o17.custom_stage1_percent}, Custom2={o17.custom_stage2_percent}")
+                # Force fix order 17 too
+                if o17.custom_stage1_percent != 100.0:
+                    o17.custom_stage1_percent = 100.0
+                    o17.custom_stage2_percent = 0.0
+                    session.add(o17)
+                    session.commit()
+                    report.append("✅ Fixed Order #17 to 100/0")
+            else:
+                report.append("Order #17 not found")
+        except Exception as e:
+            report.append(f"Error checking Order #17: {e}")
+
+    except Exception as e:
+        report.append(f"CRITICAL ERROR: {e}")
+        import traceback
+        report.append(traceback.format_exc())
+    
+    return {"report": report}

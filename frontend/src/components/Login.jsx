@@ -83,11 +83,7 @@ const Login = () => {
                         {loading ? 'Вхід...' : 'УВІЙТИ'}
                     </button>
 
-                    <div className="text-center mt-4">
-                        <span className="text-xs text-slate-400">
-                            За замовчуванням адмін: admin / admin
-                        </span>
-                    </div>
+
                 </form>
             </div>
         </div>

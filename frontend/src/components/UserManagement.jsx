@@ -16,7 +16,13 @@ const UserManagement = ({ onBack }) => {
         role: 'constructor',
         card_number: '',
         email: '',
-        phone_number: ''
+        phone_number: '',
+        phone_number: '',
+        telegram_id: '',
+        salary_mode: 'sales_percent',
+        salary_percent: 5.0,
+        payment_stage1_percent: 50.0,
+        payment_stage2_percent: 50.0
     });
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
@@ -38,7 +44,20 @@ const UserManagement = ({ onBack }) => {
     };
 
     const resetForm = () => {
-        setFormData({ username: '', password: '', full_name: '', role: 'constructor', card_number: '', email: '', phone_number: '' });
+        setFormData({
+            username: '',
+            password: '',
+            full_name: '',
+            role: 'constructor',
+            card_number: '',
+            email: '',
+            phone_number: '',
+            telegram_id: '',
+            salary_mode: 'sales_percent',
+            salary_percent: 5.0,
+            payment_stage1_percent: 50.0,
+            payment_stage2_percent: 50.0
+        });
         setIsEditing(false);
         setEditId(null);
         setError('');
@@ -52,7 +71,13 @@ const UserManagement = ({ onBack }) => {
             role: u.role,
             card_number: u.card_number || '',
             email: u.email || '',
-            phone_number: u.phone_number || ''
+            email: u.email || '',
+            phone_number: u.phone_number || '',
+            telegram_id: u.telegram_id || '',
+            salary_mode: u.salary_mode || 'sales_percent',
+            salary_percent: u.salary_percent !== undefined ? u.salary_percent : 5.0,
+            payment_stage1_percent: u.payment_stage1_percent !== undefined ? u.payment_stage1_percent : 50.0,
+            payment_stage2_percent: u.payment_stage2_percent !== undefined ? u.payment_stage2_percent : 50.0
         });
         setEditId(u.id);
         setIsEditing(true);
@@ -219,6 +244,102 @@ const UserManagement = ({ onBack }) => {
                                 />
                             </div>
 
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Telegram ID</label>
+                                <input
+                                    type="text"
+                                    value={formData.telegram_id}
+                                    onChange={e => setFormData({ ...formData, telegram_id: e.target.value })}
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm font-bold focus:outline-none focus:border-blue-500"
+                                    placeholder="123456789"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">* Можна дізнатися у бота @userinfobot</p>
+                            </div>
+
+                            {/* Salary Configuration */}
+                            <div className="col-span-2 bg-gradient-to-br from-green-50 to-blue-50 p-4 rounded-2xl border-2 border-green-100">
+                                <h3 className="text-sm font-black text-green-700 uppercase mb-3 flex items-center gap-2">
+                                    <span>💰</span> Конфігурація виплат
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Спосіб розрахунку</label>
+                                        <select
+                                            value={formData.salary_mode}
+                                            onChange={e => setFormData({ ...formData, salary_mode: e.target.value })}
+                                            className="w-full p-3 bg-white border-2 border-green-200 rounded-xl font-bold text-sm text-slate-700 focus:outline-none focus:border-green-500"
+                                        >
+                                            <option value="sales_percent">💵 Від ціни продажу</option>
+                                            <option value="materials_percent">🧱 Від вартості матеріалів</option>
+                                            <option value="fixed_amount">💰 Фіксована ціна</option>
+                                        </select>
+                                    </div>
+                                    {formData.salary_mode !== 'fixed_amount' && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
+                                                Відсоток (%)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min="0"
+                                                max="100"
+                                                value={formData.salary_percent}
+                                                onChange={e => setFormData({ ...formData, salary_percent: parseFloat(e.target.value) || 0 })}
+                                                className="w-full p-3 bg-white border-2 border-green-200 rounded-xl font-bold text-lg text-green-700 focus:outline-none focus:border-green-500"
+                                                placeholder="5.0"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-2 italic">
+                                    💡 {
+                                        formData.salary_mode === 'fixed_amount'
+                                            ? 'Конструктор завжди отримує фіксовану суму в залежності від замовлення'
+                                            : `Зарплата = ${formData.salary_mode === 'materials_percent' ? 'Вартість матеріалів' : 'Ціна продажу'} × ${formData.salary_percent}%`
+                                    }
+                                </p>
+
+                                {/* Stage Distribution */}
+                                <div className="mt-4 pt-4 border-t border-green-200">
+                                    <label className="block text-xs font-bold text-slate-600 uppercase mb-3">📊 Розподіл по етапах</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-slate-500 uppercase">Етап I (Конструктив)</label>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                min="0"
+                                                max="100"
+                                                value={formData.payment_stage1_percent}
+                                                onChange={e => setFormData({ ...formData, payment_stage1_percent: parseFloat(e.target.value) || 0 })}
+                                                className="w-full p-2 bg-white border-2 border-green-200 rounded-xl font-bold text-green-700 focus:outline-none focus:border-green-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-500 uppercase">Етап II (Монтаж)</label>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                min="0"
+                                                max="100"
+                                                value={formData.payment_stage2_percent}
+                                                onChange={e => setFormData({ ...formData, payment_stage2_percent: parseFloat(e.target.value) || 0 })}
+                                                className="w-full p-2 bg-white border-2 border-green-200 rounded-xl font-bold text-green-700 focus:outline-none focus:border-green-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className={`text-xs font-bold mt-2 ${Math.abs((formData.payment_stage1_percent + formData.payment_stage2_percent) - 100) < 0.01
+                                        ? 'text-green-600'
+                                        : 'text-red-600'
+                                        }`}>
+                                        {formData.payment_stage1_percent}% + {formData.payment_stage2_percent}% = {formData.payment_stage1_percent + formData.payment_stage2_percent}%
+                                        {Math.abs((formData.payment_stage1_percent + formData.payment_stage2_percent) - 100) < 0.01 ? ' ✓' : ' ⚠️ Має дорівнювати 100%!'}
+                                    </p>
+                                </div>
+                            </div>
+
                             <div className="flex gap-2 pt-2">
                                 {isEditing && (
                                     <button
@@ -284,6 +405,15 @@ const UserManagement = ({ onBack }) => {
                                                         <span className="flex items-center gap-2">
                                                             <i className="fas fa-phone text-slate-400"></i>
                                                             {u.phone_number}
+                                                        </span>
+                                                    )}
+
+                                                    {u.telegram_id && (
+                                                        <span className="flex items-center gap-2">
+                                                            <i className="fab fa-telegram text-blue-400"></i>
+                                                            <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1 rounded">
+                                                                ID: {u.telegram_id}
+                                                            </span>
                                                         </span>
                                                     )}
                                                 </div>

@@ -4,11 +4,13 @@ from pydantic import BaseModel
 
 SETTINGS_FILE = "settings.json"
 DEFAULT_SETTINGS = {
-    "storage_path": "C:\\TechPay_Projects" if os.name == 'nt' else "uploads"
+    "storage_path": "C:\\TechPay_Projects" if os.name == 'nt' else "uploads",
+    "telegram_bot_token": ""
 }
 
 class Settings(BaseModel):
     storage_path: str
+    telegram_bot_token: str = ""
 
 def load_settings() -> Settings:
     if not os.path.exists(SETTINGS_FILE):

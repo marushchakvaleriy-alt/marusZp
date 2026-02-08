@@ -25,7 +25,11 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     # Run migration (create tables + check for new columns)
-    migrate()
+    try:
+        migrate()
+        print("\n\n 🔥🔥🔥 RELOADED WITH CRITICAL FIXES (v1.5) 🔥🔥🔥 \n\n")
+    except Exception as e:
+        print(f"Startup Error: {e}")
 
 app.include_router(router)
 

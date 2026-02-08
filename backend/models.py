@@ -14,6 +14,11 @@ class User(SQLModel, table=True):
     card_number: Optional[str] = None
     email: Optional[str] = None
     phone_number: Optional[str] = None
+    telegram_id: Optional[str] = Field(default=None)
+    salary_mode: str = Field(default='sales_percent')  # 'sales_percent' or 'materials_percent'
+    salary_percent: float = Field(default=5.0)  # Percentage value
+    payment_stage1_percent: float = Field(default=50.0)  # % paid after stage 1 (Конструктив)
+    payment_stage2_percent: float = Field(default=50.0)  # % paid after stage 2 (Монтаж)
 
 class UserCreate(BaseModel):
     username: str
@@ -23,6 +28,11 @@ class UserCreate(BaseModel):
     card_number: Optional[str] = None
     email: Optional[str] = None
     phone_number: Optional[str] = None
+    telegram_id: Optional[str] = None
+    salary_mode: str = 'sales_percent'
+    salary_percent: float = 5.0
+    payment_stage1_percent: float = 50.0
+    payment_stage2_percent: float = 50.0
 
 class UserRead(BaseModel):
     id: int
@@ -33,6 +43,11 @@ class UserRead(BaseModel):
     card_number: Optional[str] = None
     email: Optional[str] = None
     phone_number: Optional[str] = None
+    telegram_id: Optional[str] = None
+    salary_mode: Optional[str] = None
+    salary_percent: Optional[float] = None
+    payment_stage1_percent: Optional[float] = None
+    payment_stage2_percent: Optional[float] = None
 
 class UserUpdate(BaseModel):
     password: Optional[str] = None
@@ -42,10 +57,16 @@ class UserUpdate(BaseModel):
     card_number: Optional[str] = None
     email: Optional[str] = None
     phone_number: Optional[str] = None
+    telegram_id: Optional[str] = None
+    salary_mode: Optional[str] = None
+    salary_percent: Optional[float] = None
+    payment_stage1_percent: Optional[float] = None
+    payment_stage2_percent: Optional[float] = None
 
 class OrderBase(SQLModel):
     name: str = Field(index=True)
     price: float = Field(default=0.0)
+    material_cost: float = Field(default=0.0)  # Cost of materials
     product_types: Optional[str] = None  # JSON array of product types
     date_received: Optional[date] = None
     date_design_deadline: Optional[date] = None # Deadline for constructor
@@ -56,6 +77,10 @@ class OrderBase(SQLModel):
     advance_paid_amount: float = Field(default=0.0)
     final_paid_amount: float = Field(default=0.0)
     constructor_id: Optional[int] = Field(default=None, foreign_key="user.id") # Link to User
+    # Fixed salary and custom stage distribution
+    fixed_bonus: Optional[float] = Field(default=None)  # Manager override for exact bonus amount
+    custom_stage1_percent: Optional[float] = Field(default=None)  # Override stage 1 %
+    custom_stage2_percent: Optional[float] = Field(default=None)  # Override stage 2 %
 
 class Order(OrderBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -76,6 +101,7 @@ class OrderCreate(OrderBase):
 class OrderUpdate(SQLModel):
     name: Optional[str] = None
     price: Optional[float] = None
+    material_cost: Optional[float] = None
     product_types: Optional[str] = None
     date_received: Optional[date] = None
     date_design_deadline: Optional[date] = None
@@ -87,6 +113,9 @@ class OrderUpdate(SQLModel):
     final_paid_amount: Optional[float] = None
     id: Optional[int] = None # Allow updating ID manually
     constructor_id: Optional[int] = None
+    fixed_bonus: Optional[float] = None
+    custom_stage1_percent: Optional[float] = None
+    custom_stage2_percent: Optional[float] = None
 
 class OrderRead(OrderBase):
     id: int
@@ -102,10 +131,46 @@ class OrderRead(OrderBase):
     constructor_id: Optional[int] = None
 
     @classmethod
-    def from_order(cls, order: Order):
-        bonus = order.price * 0.05
-        advance_amount = bonus * 0.5
-        final_amount = bonus * 0.5
+    def from_order(cls, order: Order, constructor=None):
+        # 1. Determine bonus amount
+        if order.fixed_bonus is not None:
+            # Manager override: use exact fixed amount
+            bonus = order.fixed_bonus
+        elif constructor and hasattr(constructor, 'salary_mode') and hasattr(constructor, 'salary_percent'):
+            # Calculate based on constructor's salary configuration
+            if constructor.salary_mode == 'fixed_amount':
+                # Fixed amount per order (salary_percent stores the fixed amount)
+                bonus = constructor.salary_percent
+            elif constructor.salary_mode == 'materials_percent':
+                # Calculate from material cost
+                bonus = (order.material_cost or 0) * (constructor.salary_percent / 100)
+            else:
+                # Default: calculate from sales price (sales_percent)
+                bonus = order.price * (constructor.salary_percent / 100)
+        else:
+            # Fallback to old logic (5% of sales price)
+            bonus = order.price * 0.05
+        
+        # 2. Determine stage distribution percentages
+        if order.custom_stage1_percent is not None:
+            # Per-order override
+            stage1_pct = order.custom_stage1_percent
+            stage2_pct = order.custom_stage2_percent if order.custom_stage2_percent is not None else (100 - stage1_pct)
+            print(f"🔧 Order {order.id} using CUSTOM stages: {stage1_pct}/{stage2_pct}")
+        elif constructor and hasattr(constructor, 'payment_stage1_percent'):
+            # Use constructor's default stage distribution
+            stage1_pct = constructor.payment_stage1_percent
+            stage2_pct = constructor.payment_stage2_percent
+            print(f"👤 Order {order.id} using constructor '{constructor.full_name}' stages: {stage1_pct}/{stage2_pct}")
+        else:
+            # Fallback: 50/50
+            stage1_pct = 50.0
+            stage2_pct = 50.0
+            print(f"⚠️ Order {order.id} using FALLBACK stages: {stage1_pct}/{stage2_pct}")
+        
+        # 3. Calculate stage amounts
+        advance_amount = bonus * (stage1_pct / 100)
+        final_amount = bonus * (stage2_pct / 100)
         
         advance_remaining = max(0, advance_amount - order.advance_paid_amount)
         final_remaining = max(0, final_amount - order.final_paid_amount)

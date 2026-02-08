@@ -9,6 +9,7 @@ import ActivityLog from './components/ActivityLog';
 import { useAuth } from './context/AuthContext';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
+import CursorAnimation from './components/CursorAnimation';
 
 function App() {
     const { user, loading, logout } = useAuth();
@@ -82,12 +83,18 @@ function App() {
     }
 
     if (!user) {
-        return <Login />;
+        return (
+            <>
+                <CursorAnimation />
+                <Login />
+            </>
+        );
     }
 
     return (
-        <div className="min-h-screen p-4 lg:p-8">
-            <div className="max-w-[1600px] mx-auto">
+        <div className="min-h-screen p-4 lg:p-8 relative">
+            <CursorAnimation />
+            <div className="max-w-[1600px] mx-auto relative z-10">
                 {currentView === 'list' && (
                     <>
                         <Dashboard refreshTrigger={statsRefreshKey} />
@@ -158,7 +165,6 @@ function App() {
                     </>
                 )}
 
-                {/* ... other views ... */}
                 {currentView === 'deductions' && (
                     <>
                         <button

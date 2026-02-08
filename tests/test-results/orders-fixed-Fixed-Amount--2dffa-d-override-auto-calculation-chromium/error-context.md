@@ -1,0 +1,120 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - paragraph [ref=e8]: Загальний борг
+        - heading "0 ₴" [level=2] [ref=e9]
+      - generic [ref=e10]:
+        - paragraph [ref=e11]: Нерозподілено
+        - heading "0 ₴" [level=2] [ref=e12]
+    - generic [ref=e13]:
+      - heading "По конструкторах" [level=3] [ref=e14]
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - paragraph [ref=e17]: Марущак
+          - generic [ref=e19]:
+            - generic [ref=e20]:
+              - paragraph [ref=e21]: Борг
+              - paragraph [ref=e22]: "0"
+            - generic [ref=e23]:
+              - paragraph [ref=e24]: Вільні
+              - paragraph [ref=e25]: "0"
+        - generic [ref=e26]:
+          - paragraph [ref=e27]: Рудий
+          - generic [ref=e29]:
+            - generic [ref=e30]:
+              - paragraph [ref=e31]: Борг
+              - paragraph [ref=e32]: "0"
+            - generic [ref=e33]:
+              - paragraph [ref=e34]: Вільні
+              - paragraph [ref=e35]: "0"
+        - generic [ref=e36]:
+          - paragraph [ref=e37]: укеуке
+          - generic [ref=e39]:
+            - generic [ref=e40]:
+              - paragraph [ref=e41]: Борг
+              - paragraph [ref=e42]: "0"
+            - generic [ref=e43]:
+              - paragraph [ref=e44]: Вільні
+              - paragraph [ref=e45]: "0"
+  - generic [ref=e46]:
+    - generic [ref=e47]:
+      - generic [ref=e48]: admin (Адмін)
+      - button "Вийти" [ref=e49] [cursor=pointer]
+    - button " Користувачі" [ref=e50] [cursor=pointer]:
+      - generic [ref=e51]: 
+      - text: Користувачі
+    - button " Очистити все" [ref=e52] [cursor=pointer]:
+      - generic [ref=e53]: 
+      - text: Очистити все
+    - button " Історія дій" [ref=e54] [cursor=pointer]:
+      - generic [ref=e55]: 
+      - text: Історія дій
+    - button " Мої провини" [ref=e56] [cursor=pointer]:
+      - generic [ref=e57]: 
+      - text: Мої провини
+    - button " Історія платежів" [ref=e58] [cursor=pointer]:
+      - generic [ref=e59]: 
+      - text: Історія платежів
+  - generic [ref=e60]:
+    - generic [ref=e61]:
+      - heading "Реєстр замовлень" [level=1] [ref=e62]
+      - generic [ref=e63]:
+        - button "🔧" [ref=e64] [cursor=pointer]:
+          - generic [ref=e65]: 🔧
+        - button "" [ref=e66] [cursor=pointer]:
+          - generic [ref=e67]: 
+        - button "+ Нове замовлення" [ref=e68] [cursor=pointer]:
+          - generic [ref=e69]: +
+          - text: Нове замовлення
+        - button "💵 Додати платіж" [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: 💵
+          - text: Додати платіж
+    - generic [ref=e72]:
+      - generic [ref=e73]:
+        - button "Активні" [ref=e74] [cursor=pointer]
+        - button "Архів" [ref=e75] [cursor=pointer]
+      - generic [ref=e76]:
+        - button "📋 Список" [ref=e77] [cursor=pointer]:
+          - generic [ref=e78]: 📋
+          - text: Список
+        - button "📅 Календар" [ref=e79] [cursor=pointer]:
+          - generic [ref=e80]: 📅
+          - text: Календар
+      - combobox [ref=e82] [cursor=pointer]:
+        - option "👨‍🔧 Всі конструктори" [selected]
+        - option "-- Не призначено --"
+        - option "Administrator"
+        - option "Марущак"
+        - option "Рудий"
+        - option "укеуке"
+      - textbox "Пошук за ID, назвою..." [ref=e84]
+    - table [ref=e86]:
+      - rowgroup [ref=e87]:
+        - 'row "ID ↓ ↕ Виріб / Об''єкт ↕ Прийнято в роботу Дедлайн Вартість Конструкторська робота Етап I: Конструктив (50%) Етап II: Монтаж (50%) Штрафи Борг/Залишок" [ref=e88]':
+          - columnheader "ID ↓ ↕" [ref=e89] [cursor=pointer]:
+            - generic [ref=e90]:
+              - text: ID
+              - generic [ref=e91]: ↓
+              - generic [ref=e92]: ↕
+          - columnheader "Виріб / Об'єкт ↕" [ref=e93] [cursor=pointer]:
+            - generic [ref=e94]:
+              - text: Виріб / Об'єкт
+              - generic [ref=e95]: ↕
+          - columnheader "Прийнято в роботу" [ref=e96]
+          - columnheader "Дедлайн" [ref=e97]
+          - columnheader "Вартість" [ref=e98]
+          - columnheader "Конструкторська робота" [ref=e99]
+          - 'columnheader "Етап I: Конструктив (50%)" [ref=e100]'
+          - 'columnheader "Етап II: Монтаж (50%)" [ref=e101]'
+          - columnheader "Штрафи" [ref=e102]
+          - columnheader "Борг/Залишок" [ref=e103]
+      - rowgroup
+    - generic [ref=e104]:
+      - generic [ref=e105]: 📭
+      - heading "Немає замовлень" [level=3] [ref=e106]
+      - paragraph [ref=e107]: Спробуйте змінити фільтри або пошук
+```

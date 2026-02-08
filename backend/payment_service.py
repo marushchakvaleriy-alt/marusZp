@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import List, Tuple, Optional
 from sqlmodel import Session, select
-from models import Order
+from models import Order, User
 from payments import Payment, PaymentAllocation
 
 class PaymentDistributionService:
@@ -49,6 +49,42 @@ class PaymentDistributionService:
         return allocations, remaining
     
     @staticmethod
+    def _calculate_financials(order: Order, session: Session) -> Tuple[float, float, float]:
+        """
+        Calculates (bonus, advance_amount, final_amount) using the same logic as OrderRead.
+        """
+        constructor = session.get(User, order.constructor_id) if order.constructor_id else None
+        
+        # 1. Determine bonus amount
+        if order.fixed_bonus is not None:
+            bonus = order.fixed_bonus
+        elif constructor and hasattr(constructor, 'salary_mode') and hasattr(constructor, 'salary_percent'):
+            if constructor.salary_mode == 'fixed_amount':
+                bonus = constructor.salary_percent
+            elif constructor.salary_mode == 'materials_percent':
+                bonus = (order.material_cost or 0) * (constructor.salary_percent / 100)
+            else:
+                bonus = order.price * (constructor.salary_percent / 100)
+        else:
+            bonus = order.price * 0.05
+            
+        # 2. Determine stage distribution percentages
+        if order.custom_stage1_percent is not None:
+            stage1_pct = order.custom_stage1_percent
+            stage2_pct = order.custom_stage2_percent if order.custom_stage2_percent is not None else (100 - stage1_pct)
+        elif constructor and hasattr(constructor, 'payment_stage1_percent'):
+            stage1_pct = constructor.payment_stage1_percent
+            stage2_pct = constructor.payment_stage2_percent
+        else:
+            stage1_pct = 50.0
+            stage2_pct = 50.0
+            
+        advance_amount = bonus * (stage1_pct / 100)
+        final_amount = bonus * (stage2_pct / 100)
+        
+        return bonus, advance_amount, final_amount
+
+    @staticmethod
     def _allocate_to_order(
         order: Order,
         available_amount: float,
@@ -59,22 +95,21 @@ class PaymentDistributionService:
         allocations = []
         remaining = available_amount
         
-        bonus = order.price * 0.05
-        advance_amount = bonus * 0.5
-        final_amount = bonus * 0.5
+        # Calculate financials dynamically
+        _, advance_amount, final_amount = PaymentDistributionService._calculate_financials(order, session)
         
         # Аванс
         if (stage_priority is None or stage_priority == "advance"):
             # Only allocate usage if work has started/handed over (date_to_work is set)
             if order.date_to_work:
                 advance_remaining = max(0, advance_amount - order.advance_paid_amount)
-                if advance_remaining > 0 and remaining > 0:
+                if advance_remaining > 0.01 and remaining > 0:
                     allocation = min(remaining, advance_remaining)
                     order.advance_paid_amount += allocation
                     remaining -= allocation
                     
                     # Якщо оплачено повністю, поставити дату
-                    if order.advance_paid_amount >= advance_amount and not order.date_advance_paid:
+                    if order.advance_paid_amount >= advance_amount - 0.01 and not order.date_advance_paid:
                         order.date_advance_paid = date.today()
                     
                     allocations.append({
@@ -88,14 +123,14 @@ class PaymentDistributionService:
         if (stage_priority is None or stage_priority == "final"):
             # Only allocate final payment if installation is done (date_installation is set)
             if order.date_installation:
-                final_remaining = final_amount - order.final_paid_amount
-                if final_remaining > 0 and remaining > 0:
+                final_remaining = max(0, final_amount - order.final_paid_amount)
+                if final_remaining > 0.01 and remaining > 0:
                     allocation = min(remaining, final_remaining)
                     order.final_paid_amount += allocation
                     remaining -= allocation
                     
                     # Якщо оплачено повністю, поставити дату
-                    if order.final_paid_amount >= final_amount and not order.date_final_paid:
+                    if order.final_paid_amount >= final_amount - 0.01 and not order.date_final_paid:
                         order.date_final_paid = date.today()
                     
                     allocations.append({
@@ -202,9 +237,8 @@ class PaymentDistributionService:
         allocations = []
         remaining_to_give = amount
         
-        bonus = order.price * 0.05
-        advance_amount = bonus * 0.5
-        final_amount = bonus * 0.5
+        # Calculate financials dynamically
+        _, advance_amount, final_amount = PaymentDistributionService._calculate_financials(order, session)
         
         # 1. Аванс
         # Розподіляти тільки якщо етап "Конструктив" здано (date_to_work has value)

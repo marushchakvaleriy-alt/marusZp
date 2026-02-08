@@ -123,9 +123,150 @@ def migrate():
                 except Exception as e:
                      logger.error(f"Failed to add 'phone_number': {e}")
                      session.rollback()
+
+            # Check for telegram_id
+            try:
+                session.exec(text("SELECT telegram_id FROM user LIMIT 1"))
+                logger.info("Column 'telegram_id' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'telegram_id' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN telegram_id VARCHAR"))
+                    session.commit()
+                    logger.info("Added 'telegram_id' column.")
+                except Exception as e:
+                     logger.error(f"Failed to add 'telegram_id': {e}")
+                     session.rollback()
+            
+            # Check for salary_mode
+            try:
+                session.exec(text("SELECT salary_mode FROM user LIMIT 1"))
+                logger.info("Column 'salary_mode' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'salary_mode' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN salary_mode VARCHAR DEFAULT 'sales_percent'"))
+                    session.commit()
+                    logger.info("Added 'salary_mode' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'salary_mode': {e}")
+                    session.rollback()
+            
+            # Check for salary_percent
+            try:
+                session.exec(text("SELECT salary_percent FROM user LIMIT 1"))
+                logger.info("Column 'salary_percent' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'salary_percent' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN salary_percent FLOAT DEFAULT 5.0"))
+                    session.commit()
+                    logger.info("Added 'salary_percent' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'salary_percent': {e}")
+                    session.rollback()
+            
+            # Check for payment_stage1_percent
+            try:
+                session.exec(text("SELECT payment_stage1_percent FROM user LIMIT 1"))
+                logger.info("Column 'payment_stage1_percent' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'payment_stage1_percent' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN payment_stage1_percent FLOAT DEFAULT 50.0"))
+                    session.commit()
+                    logger.info("Added 'payment_stage1_percent' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'payment_stage1_percent': {e}")
+                    session.rollback()
+            
+            # Check for payment_stage2_percent
+            try:
+                session.exec(text("SELECT payment_stage2_percent FROM user LIMIT 1"))
+                logger.info("Column 'payment_stage2_percent' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'payment_stage2_percent' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE user ADD COLUMN payment_stage2_percent FLOAT DEFAULT 50.0"))
+                    session.commit()
+                    logger.info("Added 'payment_stage2_percent' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'payment_stage2_percent': {e}")
+                    session.rollback()
                      
         except Exception as outer_e:
             logger.error(f"Error checking user columns: {outer_e}")
+            session.rollback()
+    
+    # 4b. Add Order Columns (material_cost)
+    with Session(engine) as session:
+        try:
+            # Check for material_cost
+            try:
+                session.exec(text("SELECT material_cost FROM \"order\" LIMIT 1"))
+                logger.info("Column 'material_cost' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'material_cost' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN material_cost FLOAT DEFAULT 0.0"))
+                    session.commit()
+                    logger.info("Added 'material_cost' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'material_cost': {e}")
+                    session.rollback()
+            
+            # Check for fixed_bonus
+            try:
+                session.exec(text("SELECT fixed_bonus FROM \"order\" LIMIT 1"))
+                logger.info("Column 'fixed_bonus' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'fixed_bonus' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN fixed_bonus FLOAT"))
+                    session.commit()
+                    logger.info("Added 'fixed_bonus' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'fixed_bonus': {e}")
+                    session.rollback()
+            
+            # Check for custom_stage1_percent
+            try:
+                session.exec(text("SELECT custom_stage1_percent FROM \"order\" LIMIT 1"))
+                logger.info("Column 'custom_stage1_percent' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'custom_stage1_percent' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN custom_stage1_percent FLOAT"))
+                    session.commit()
+                    logger.info("Added 'custom_stage1_percent' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'custom_stage1_percent': {e}")
+                    session.rollback()
+            
+            # Check for custom_stage2_percent
+            try:
+                session.exec(text("SELECT custom_stage2_percent FROM \"order\" LIMIT 1"))
+                logger.info("Column 'custom_stage2_percent' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'custom_stage2_percent' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN custom_stage2_percent FLOAT"))
+                    session.commit()
+                    logger.info("Added 'custom_stage2_percent' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'custom_stage2_percent': {e}")
+                    session.rollback()
+        except Exception as outer_e:
+            logger.error(f"Error checking order columns: {outer_e}")
             session.rollback()
 
     # 5. Seed Default Admin
