@@ -9,13 +9,29 @@ import ActivityLog from './components/ActivityLog';
 import { useAuth } from './context/AuthContext';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
-import CursorAnimation from './components/CursorAnimation';
+import SeasonBackground from './components/SeasonBackground';
 
 function App() {
     const { user, loading, logout } = useAuth();
     const [currentView, setCurrentView] = useState('list');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [statsRefreshKey, setStatsRefreshKey] = useState(0);
+
+    // Season State
+    const [season, setSeason] = useState(() => {
+        // Auto-detect season logic (optional, defaults to winter for now)
+        const month = new Date().getMonth(); // 0-11
+        if (month >= 2 && month <= 4) return 'spring';
+        if (month >= 5 && month <= 7) return 'summer';
+        if (month >= 8 && month <= 10) return 'autumn';
+        return 'winter';
+    });
+
+    const cycleSeason = () => {
+        const seasons = ['winter', 'spring', 'summer', 'autumn'];
+        const nextIndex = (seasons.indexOf(season) + 1) % seasons.length;
+        setSeason(seasons[nextIndex]);
+    };
 
     // Initial History Setup & Listener
     useEffect(() => {
@@ -85,15 +101,34 @@ function App() {
     if (!user) {
         return (
             <>
-                <CursorAnimation />
+                <SeasonBackground season={season} />
                 <Login />
             </>
         );
     }
 
+    const getSeasonIcon = () => {
+        switch (season) {
+            case 'winter': return '❄️';
+            case 'spring': return '🐦';
+            case 'summer': return '✨';
+            case 'autumn': return '🍂';
+            default: return '🌈';
+        }
+    };
+
     return (
         <div className="min-h-screen p-4 lg:p-8 relative">
-            <CursorAnimation />
+            <SeasonBackground season={season} />
+
+            {/* Season Toggle Button */}
+            <button
+                onClick={cycleSeason}
+                className="fixed bottom-4 right-4 z-50 bg-white/80 backdrop-blur-md p-3 rounded-full shadow-lg border border-slate-200 hover:scale-110 transition-transform text-2xl"
+                title="Змінити пору року"
+            >
+                {getSeasonIcon()}
+            </button>
             <div className="max-w-[1600px] mx-auto relative z-10">
                 {currentView === 'list' && (
                     <>
