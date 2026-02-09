@@ -1022,6 +1022,14 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
                 except:
                     return None
 
+        def parse_datetime(dt_str):
+            if not dt_str: return None
+            try:
+                # Handle standard ISO format
+                return datetime.fromisoformat(dt_str)
+            except:
+                return None
+
         # USERS
         for item in data.get("users", []):
             session.add(User(**item))
@@ -1043,11 +1051,13 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
         # PAYMENTS
         for item in data.get("payments", []):
             if "date_received" in item: item["date_received"] = parse_date(item["date_received"])
+            if "created_at" in item: item["created_at"] = parse_datetime(item["created_at"])
             session.add(Payment(**item))
         session.flush()
 
         # ALLOCATIONS
         for item in data.get("allocations", []):
+            if "created_at" in item: item["created_at"] = parse_datetime(item["created_at"])
             session.add(PaymentAllocation(**item))
         
         # DEDUCTIONS
@@ -1058,15 +1068,7 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
             
         # ACTIVITY LOGS
         for item in data.get("activity_logs", []):
-            # Timestamp might be string, but ActivityLog usually defines specific type?
-            # If ActivityLog uses String for timestamp, we are fine. 
-            # If it uses DateTime/Date, we need to parse.
-            # Based on models.py (implied), timestamp is likely string in this project based on logs I saw.
-            # But let's check one log entry from backup: "timestamp":"2026-02-08" (looks like string date)
-            # or "2026-02-08T12:17:31..."
-            # If the model expects string, we leave it. If it expects datetime, we must parse.
-            # Let's assume it handles string or is defined as string for now, 
-            # as the error specifically mentioned "SQLite Date type" which refers to `date` columns.
+            if "timestamp" in item: item["timestamp"] = parse_date(item["timestamp"])
             session.add(ActivityLog(**item))
             
         # FILES
