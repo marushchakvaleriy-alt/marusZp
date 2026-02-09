@@ -1073,6 +1073,7 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
             
         # FILES
         for item in data.get("order_files", []):
+            if "upload_date" in item: item["upload_date"] = parse_date(item["upload_date"])
             session.add(OrderFile(**item))
             
         session.commit()
