@@ -337,7 +337,16 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     // Filter orders by completion status and search query
     const filteredOrders = orders.filter(order => {
         // Determine if order is completed (archived)
-        const isCompleted = order.date_advance_paid && order.date_installation && order.date_final_paid;
+        // Determine if order is completed (archived)
+        // CRITICAL: Order is completed if explicitly paid OR if installation is done and debt is covered by fines
+        const orderFines = deductions
+            .filter(d => d.order_id === order.id)
+            .reduce((sum, d) => sum + d.amount, 0);
+
+        const adjustedDebt = (order.is_critical_debt ? order.current_debt : order.remainder_amount) - orderFines;
+        const isEffectivelyPaid = adjustedDebt <= 0.01;
+
+        const isCompleted = !!order.date_final_paid || (!!order.date_installation && isEffectivelyPaid);
 
         // Filter by view mode
         const matchesViewMode = viewMode === 'active' ? !isCompleted : isCompleted;
@@ -875,11 +884,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                             val = order.remainder_amount - unpaidFines;
                                                         }
 
-                                                        // Allow negative values (overpayment/fines > remainder)
-                                                        const isNegative = val < -0.01;
+                                                        // Clamp negative values to 0 (fines move to unallocated)
+                                                        const displayVal = Math.max(0, val);
                                                         return (
-                                                            <span className={isNegative ? 'text-red-600' : ''}>
-                                                                {val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {isNegative && '₴'}
+                                                            <span>
+                                                                {displayVal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
                                                             </span>
                                                         );
                                                     })()}
@@ -985,8 +994,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 <span className="text-orange-500 text-[10px] ml-1">штрафи</span>
                                             </div>
                                         )}
-                                        <div className={`text-sm font-black ml-auto ${order.is_critical_debt || adjustedDebt < -0.01 ? 'text-red-500' : 'text-slate-300'}`}>
-                                            {adjustedDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
+                                        <div className={`text-sm font-black ml-auto ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                            {Math.max(0, adjustedDebt).toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
                                         </div>
                                     </div>
                                 </div>

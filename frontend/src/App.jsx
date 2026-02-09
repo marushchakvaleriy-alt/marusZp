@@ -132,7 +132,7 @@ function App() {
                                 onClick={() => navigateTo('deductions')}
                                 className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
                             >
-                                <i className="fas fa-exclamation-triangle"></i> Мої провини
+                                <i className="fas fa-exclamation-triangle"></i> {(user.role === 'admin' || user.role === 'manager') ? 'Провини конструкторів' : 'Мої провини'}
                             </button>
                             <button
                                 onClick={() => navigateTo('payments')}

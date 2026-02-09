@@ -886,11 +886,17 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             # User expectation seems to be simpler NET math.
             global_total_debt += max(0, c_debt) # Global debt is what WE OWE. If he owes us, we owe 0.
             
+            # LOGIC CHANGE: If constructor owes money (negative debt), 
+            # move that amount to "Unallocated" (Вільні) and set debt to 0.
+            if c_debt < 0:
+                c_unallocated += abs(c_debt)
+                c_debt = 0.0
+
             constructors_stats.append({
                 "id": c.id,
                 "name": c.full_name or c.username,
                 "unallocated": c_unallocated,
-                "debt": c_debt # Can be negative now
+                "debt": c_debt 
             })
         
         return {
