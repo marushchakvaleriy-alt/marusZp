@@ -12,15 +12,24 @@ const EditableDate = ({ value, onSave, className, emptyText = "--.--.--" }) => {
         setDateValue(value || '');
     }, [value]);
 
-    const handleSave = () => {
+    const handleSave = (newValue) => {
         setIsEditing(false);
-        if (dateValue !== value) {
-            onSave(dateValue || null);
+        if (newValue !== value) {
+            onSave(newValue || null);
+        }
+    };
+
+    const handleChange = (e) => {
+        const newValue = e.target.value;
+        setDateValue(newValue);
+        // Save immediately when date is picked
+        if (newValue) {
+            handleSave(newValue);
         }
     };
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter') handleSave();
+        if (e.key === 'Enter') handleSave(dateValue);
         if (e.key === 'Escape') {
             setIsEditing(false);
             setDateValue(value || '');
@@ -34,8 +43,8 @@ const EditableDate = ({ value, onSave, className, emptyText = "--.--.--" }) => {
                 autoFocus
                 className={`px-2 py-1 border border-blue-300 rounded shadow-sm outline-none text-sm ${className}`}
                 value={dateValue}
-                onChange={(e) => setDateValue(e.target.value)}
-                onBlur={handleSave}
+                onChange={handleChange}
+                onBlur={() => handleSave(dateValue)}
                 onKeyDown={handleKeyDown}
                 onClick={(e) => e.stopPropagation()}
             />

@@ -500,11 +500,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             {isCalendarMode ? (
                 <CalendarView orders={filteredOrders} onSelectOrder={onSelectOrder} />
             ) : (
-                <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden border border-white/20">
                     {/* Desktop Table View */}
                     <table className="hidden md:table w-full text-left border-collapse">
                         <thead>
-                            <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50/80">
+                            <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200/30">
                                 <th
                                     className="p-4 pl-6 border-b font-bold cursor-pointer hover:bg-slate-100 transition select-none group"
                                     onClick={() => {
@@ -547,344 +547,353 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                 <th className="p-4 border-b text-center font-bold text-red-500">Дедлайн</th>
                                 {showFinancials && <th className="p-4 border-b text-right font-bold">Вартість</th>}
                                 {showFinancials && <th className="p-4 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
-                                <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/50">Етап I: Конструктив</th>
-                                <th className="p-4 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/30">Етап II: Монтаж</th>
-                                {showFinancials && <th className="p-4 border-b text-center font-bold text-orange-600 bg-orange-50/30">Штрафи</th>}
+                                <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>
+                                <th className="p-4 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>
+                                {showFinancials && <th className="p-4 border-b text-center font-bold text-orange-600 bg-orange-50/10">Штрафи</th>}
                                 {showFinancials && <th className="p-4 pr-6 border-b text-right font-bold">Борг/Залишок</th>}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {filteredOrders.map((order) => {
-                                const bonus = order.bonus;
-                                // USE BACKEND VALUES, fall back to calculation only if missing
-                                const advanceAmount = showFinancials ? (order.advance_amount ?? (bonus * 0.5)) : 0;
-                                const finalAmount = showFinancials ? (order.final_amount ?? (bonus * 0.5)) : 0;
+                        <tbody className="divide-y divide-slate-200/20">
+                            {filteredOrders.length === 0 ? (
+                                <tr>
+                                    <td colSpan="11" className="p-8 text-center text-slate-400 italic">
+                                        Замовлень не знайдено
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredOrders.map((order) => {
+                                    const bonus = order.bonus;
+                                    // USE BACKEND VALUES, fall back to calculation only if missing
+                                    const advanceAmount = showFinancials ? (order.advance_amount ?? (bonus * 0.5)) : 0;
+                                    const finalAmount = showFinancials ? (order.final_amount ?? (bonus * 0.5)) : 0;
+                                    const stageAmount = bonus * 0.5;
 
-                                const isPaidStage1 = !!order.date_advance_paid;
-                                const isPaidStage2 = !!order.date_final_paid;
+                                    const isPaidStage1 = !!order.date_advance_paid;
+                                    const isPaidStage2 = !!order.date_final_paid;
 
-                                return (
-                                    <tr key={order.id} className="hover:bg-blue-50/20 transition cursor-pointer group" onClick={() => onSelectOrder(order)}>
-                                        <td className="p-4 pl-6 text-slate-300 font-bold italic text-sm group-hover:text-blue-500 transition-colors">
-                                            <div className="flex items-center gap-2">
-                                                #{order.id}
-                                                <button
-                                                    onClick={(e) => handleEditId(e, order)}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 transition"
-                                                    title="Змінити ID"
-                                                >
-                                                    ✎
-                                                </button>
-                                            </div>
-                                        </td>
-
-                                        <td className="p-4">
-                                            <div className="font-black text-slate-800 italic text-base">{order.name}</div>
-                                            {/* Constructor Name Display / Edit */}
-                                            <div onClick={(e) => e.stopPropagation()} className="mt-1">
-                                                {canManage ? (
-                                                    <select
-                                                        className="w-full text-xs font-bold text-blue-600 bg-blue-50/50 border-0 rounded-lg p-1 outline-none focus:ring-1 focus:ring-blue-300 cursor-pointer"
-                                                        value={order.constructor_id || ""}
-                                                        onChange={async (e) => {
-                                                            const val = e.target.value ? parseInt(e.target.value) : null;
-                                                            try {
-                                                                await updateOrder(order.id, { constructor_id: val });
-                                                                fetchOrders();
-                                                            } catch (err) {
-                                                                alert("Помилка призначення конструктора");
-                                                            }
-                                                        }}
+                                    return (
+                                        <tr key={order.id} className="hover:bg-white/10 transition cursor-pointer group" onClick={() => onSelectOrder(order)}>
+                                            <td className="p-4 pl-6 text-slate-300 font-bold italic text-sm group-hover:text-blue-500 transition-colors">
+                                                <div className="flex items-center gap-2">
+                                                    #{order.id}
+                                                    <button
+                                                        onClick={(e) => handleEditId(e, order)}
+                                                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 transition"
+                                                        title="Змінити ID"
                                                     >
-                                                        <option value="">-- Не призначено --</option>
-                                                        {constructors.map(c => (
-                                                            <option key={c.id} value={c.id}>
-                                                                {c.full_name || c.username}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                ) : (
-                                                    order.constructor_id && (
-                                                        <div className="text-xs font-bold text-blue-600 flex items-center gap-1">
-                                                            <span>👨‍🔧</span>
-                                                            {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
-                                                        </div>
-                                                    )
+                                                        ✎
+                                                    </button>
+                                                </div>
+                                            </td>
+
+                                            <td className="p-4">
+                                                <div className="font-black text-slate-800 italic text-base">{order.name}</div>
+                                                {/* Constructor Name Display / Edit */}
+                                                <div onClick={(e) => e.stopPropagation()} className="mt-1">
+                                                    {canManage ? (
+                                                        <select
+                                                            className="w-full text-xs font-bold text-blue-600 bg-blue-50/30 border-0 rounded-lg p-1 outline-none focus:ring-1 focus:ring-blue-300 cursor-pointer"
+                                                            value={order.constructor_id || ""}
+                                                            onChange={async (e) => {
+                                                                const val = e.target.value ? parseInt(e.target.value) : null;
+                                                                try {
+                                                                    await updateOrder(order.id, { constructor_id: val });
+                                                                    fetchOrders();
+                                                                } catch (err) {
+                                                                    alert("Помилка призначення конструктора");
+                                                                }
+                                                            }}
+                                                        >
+                                                            <option value="">-- Не призначено --</option>
+                                                            {constructors.map(c => (
+                                                                <option key={c.id} value={c.id}>
+                                                                    {c.full_name || c.username}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        order.constructor_id && (
+                                                            <div className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                                                                <span>👨‍🔧</span>
+                                                                {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                                {order.product_types && (() => {
+                                                    try {
+                                                        const types = JSON.parse(order.product_types);
+                                                        if (types && types.length > 0) {
+                                                            return (
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {types.map((type, idx) => (
+                                                                        <span key={idx} className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md uppercase">
+                                                                            {type}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        }
+                                                    } catch (e) {
+                                                        return null;
+                                                    }
+                                                })()}
+                                            </td>
+
+                                            <td className="p-4 text-center">
+                                                <span className="text-sm font-bold text-purple-600 italic">
+                                                    {formatDate(order.date_received)}
+                                                </span>
+                                            </td>
+
+                                            <td className="p-4 text-center">
+                                                {/* Design Deadline Input (Admin Only) */}
+                                                {isAdmin && !isPaidStage1 && (
+                                                    <div className="flex justify-center" onClick={e => e.stopPropagation()}>
+                                                        <input
+                                                            type="date"
+                                                            className={`w-28 text-[12px] font-bold p-1 bg-white border rounded shadow-sm focus:border-blue-500 ${!order.date_to_work && order.date_design_deadline && new Date() > new Date(order.date_design_deadline)
+                                                                ? 'border-red-400 text-red-600'
+                                                                : 'border-slate-200 text-slate-700'
+                                                                }`}
+                                                            value={order.date_design_deadline || ''}
+                                                            onChange={async (e) => {
+                                                                try {
+                                                                    await updateOrder(order.id, { date_design_deadline: e.target.value || null });
+                                                                    fetchOrders();
+                                                                } catch (err) {
+                                                                    console.error("Failed to update deadline", err);
+                                                                    alert("Помилка оновлення дедлайну");
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
                                                 )}
-                                            </div>
-                                            {order.product_types && (() => {
-                                                try {
-                                                    const types = JSON.parse(order.product_types);
-                                                    if (types && types.length > 0) {
+                                                {(!isAdmin || isPaidStage1) && order.date_design_deadline && (
+                                                    (() => {
+                                                        const isOverdue = !order.date_to_work && new Date() > new Date(order.date_design_deadline);
                                                         return (
-                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                {types.map((type, idx) => (
-                                                                    <span key={idx} className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md uppercase">
-                                                                        {type}
-                                                                    </span>
-                                                                ))}
+                                                            <div className={`text-[12px] font-bold px-2 py-1 rounded inline-block ${isOverdue
+                                                                ? 'text-red-500 bg-red-50 border border-red-100'
+                                                                : 'text-blue-600 bg-blue-50 border border-blue-100'
+                                                                }`}>
+                                                                {isOverdue && '⚠️ '} {formatDate(order.date_design_deadline)}
                                                             </div>
                                                         );
-                                                    }
-                                                } catch (e) {
-                                                    return null;
-                                                }
-                                            })()}
-                                        </td>
+                                                    })()
+                                                )}
+                                                {!order.date_design_deadline && !isAdmin && (
+                                                    <span className="text-slate-300 text-xs">—</span>
+                                                )}
+                                            </td>
 
-                                        <td className="p-4 text-center">
-                                            <span className="text-sm font-bold text-purple-600 italic">
-                                                {formatDate(order.date_received)}
-                                            </span>
-                                        </td>
-
-                                        <td className="p-4 text-center">
-                                            {/* Design Deadline Input (Admin Only) */}
-                                            {isAdmin && !isPaidStage1 && (
-                                                <div className="flex justify-center" onClick={e => e.stopPropagation()}>
-                                                    <input
-                                                        type="date"
-                                                        className={`w-28 text-[12px] font-bold p-1 bg-white border rounded shadow-sm focus:border-blue-500 ${!order.date_to_work && order.date_design_deadline && new Date() > new Date(order.date_design_deadline)
-                                                            ? 'border-red-400 text-red-600'
-                                                            : 'border-slate-200 text-slate-700'
-                                                            }`}
-                                                        value={order.date_design_deadline || ''}
-                                                        onChange={async (e) => {
-                                                            try {
-                                                                await updateOrder(order.id, { date_design_deadline: e.target.value || null });
-                                                                fetchOrders();
-                                                            } catch (err) {
-                                                                console.error("Failed to update deadline", err);
-                                                                alert("Помилка оновлення дедлайну");
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
-                                            {(!isAdmin || isPaidStage1) && order.date_design_deadline && (
-                                                (() => {
-                                                    const isOverdue = !order.date_to_work && new Date() > new Date(order.date_design_deadline);
-                                                    return (
-                                                        <div className={`text-[12px] font-bold px-2 py-1 rounded inline-block ${isOverdue
-                                                            ? 'text-red-500 bg-red-50 border border-red-100'
-                                                            : 'text-blue-600 bg-blue-50 border border-blue-100'
-                                                            }`}>
-                                                            {isOverdue && '⚠️ '} {formatDate(order.date_design_deadline)}
-                                                        </div>
-                                                    );
-                                                })()
-                                            )}
-                                            {!order.date_design_deadline && !isAdmin && (
-                                                <span className="text-slate-300 text-xs">—</span>
-                                            )}
-                                        </td>
-
-                                        {showFinancials && (
-                                            <>
-                                                <td className="p-4 text-right font-bold text-slate-600 italic mono">
-                                                    {order.price.toLocaleString()}
-                                                </td>
-                                                <td className="p-4 text-right font-black text-blue-600 italic text-lg mono">
-                                                    {bonus.toLocaleString()}
-                                                </td>
-                                            </>
-                                        )}
-
-                                        {(() => {
-                                            // Calculate unpaid fines for this order
-                                            const unpaidFines = deductions
-                                                .filter(d => d.order_id === order.id)
-                                                .reduce((sum, d) => sum + d.amount, 0);
-
-                                            // Calculate adjusted debt
-                                            const adjustedDebt = (order.is_critical_debt ? order.current_debt : order.remainder_amount) - unpaidFines;
-
-                                            // Determine if stages are effectively paid (debt covered by fines)
-                                            const isEffectivelyPaid = adjustedDebt <= 0.01;
-
-                                            // Stage 1 status
-                                            const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && isEffectivelyPaid && order.advance_remaining <= 0.01);
-
-                                            // Stage 2 status
-                                            const isPaidStage2 = !!order.date_final_paid || (order.date_installation && isEffectivelyPaid);
-
-                                            return (
+                                            {showFinancials && (
                                                 <>
-                                                    {/* Stage 1 */}
-                                                    <td className="p-4 text-center bg-slate-50/30">
-                                                        <div className="flex flex-col items-center">
-                                                            <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
-                                                                Здано: {formatDate(order.date_to_work)}
-                                                            </span>
-                                                            {order.advance_paid_amount > 0 && order.advance_paid_amount < order.advance_amount && !isPaidStage1 ? (
-                                                                <span className="text-sm font-black italic mono mb-1 text-yellow-600">
-                                                                    {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
-                                                                </span>
-                                                            ) : (
-                                                                <span className={`text-sm font-black italic mono mb-1 ${isPaidStage1 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
-                                                                    {advanceAmount.toLocaleString()} ₴
-                                                                </span>
-                                                            )}
-                                                            {isPaidStage1 ? (
-                                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
-                                                                    {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
-                                                                </span>
-                                                            ) : order.date_to_work ? (
-                                                                (() => {
-                                                                    // Calculate fines applied to this stage
-                                                                    const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
-                                                                    const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
-
-                                                                    // Assume fines go to advance stage first (same logic as payment distribution)
-                                                                    const fineToAdvance = Math.min(totalFines, order.advance_amount);
-                                                                    const realPayment = order.advance_paid_amount;
-
-                                                                    return (
-                                                                        <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                            БОРГ
-                                                                            <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
-                                                                                {realPayment > 0 && (
-                                                                                    <>
-                                                                                        <span className="text-slate-700">{realPayment.toLocaleString()}</span>
-                                                                                        {fineToAdvance > 0 && <span className="text-slate-400">+</span>}
-                                                                                    </>
-                                                                                )}
-                                                                                {fineToAdvance > 0 && (
-                                                                                    <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                        {fineToAdvance.toLocaleString()} ШТРАФ
-                                                                                    </span>
-                                                                                )}
-                                                                                {(realPayment > 0 || fineToAdvance > 0) && (
-                                                                                    <span className="text-slate-400">/</span>
-                                                                                )}
-                                                                                <span className="text-slate-600">
-                                                                                    {(order.advance_amount - realPayment - fineToAdvance).toLocaleString()} ₴
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })()
-                                                            ) : (
-                                                                <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
-                                                                    ОЧІКУЄ
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                    <td className="p-4 text-right font-bold text-slate-600 italic mono">
+                                                        {order.price.toLocaleString()}
                                                     </td>
-
-                                                    {/* Stage 2 */}
-                                                    <td className="p-4 text-center bg-emerald-50/10">
-                                                        <div className="flex flex-col items-center">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                                                Монтаж: {formatDate(order.date_installation)}
-                                                            </span>
-                                                            <span className={`text-sm font-black italic mono mb-1 ${isPaidStage2 ? 'text-green-600 underline decoration-2' : 'text-slate-300'}`}>
-                                                                {finalAmount.toLocaleString()} ₴
-                                                            </span>
-                                                            {isPaidStage2 ? (
-                                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
-                                                                    {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
-                                                                </span>
-                                                            ) : order.date_installation ? (
-                                                                (() => {
-                                                                    // Calculate fines applied to this stage
-                                                                    const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
-                                                                    const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
-
-                                                                    // Fines go to advance first, then final
-                                                                    const fineToAdvance = Math.min(totalFines, order.advance_amount);
-                                                                    const fineToFinal = Math.max(0, Math.min(totalFines - fineToAdvance, stageAmount));
-                                                                    const realPayment = order.final_paid_amount;
-
-                                                                    return (
-                                                                        <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                            БОРГ
-                                                                            <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
-                                                                                {realPayment > 0 && (
-                                                                                    <>
-                                                                                        <span className="text-slate-700">{realPayment.toLocaleString()}</span>
-                                                                                        {fineToFinal > 0 && <span className="text-slate-400">+</span>}
-                                                                                    </>
-                                                                                )}
-                                                                                {fineToFinal > 0 && (
-                                                                                    <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                        {fineToFinal.toLocaleString()} ШТРАФ
-                                                                                    </span>
-                                                                                )}
-                                                                                {(realPayment > 0 || fineToFinal > 0) && (
-                                                                                    <span className="text-slate-400">/</span>
-                                                                                )}
-                                                                                <span className="text-slate-600">
-                                                                                    {(stageAmount - realPayment - fineToFinal).toLocaleString()} ₴
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })()
-                                                            ) : (
-                                                                <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
-                                                                    ОЧІКУЄ
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                    <td className="p-4 text-right font-black text-blue-600 italic text-lg mono">
+                                                        {bonus.toLocaleString()}
                                                     </td>
                                                 </>
-                                            );
-                                        })()}
+                                            )}
 
-                                        {/* Fines column */}
-                                        {showFinancials && (
-                                            <td className="p-4 text-center bg-orange-50/20">
-                                                {(() => {
-                                                    const unpaidFines = deductions
-                                                        .filter(d => d.order_id === order.id)
-                                                        .reduce((sum, d) => sum + d.amount, 0);
+                                            {(() => {
+                                                // Calculate unpaid fines for this order
+                                                const unpaidFines = deductions
+                                                    .filter(d => d.order_id === order.id)
+                                                    .reduce((sum, d) => sum + d.amount, 0);
 
-                                                    if (unpaidFines > 0) {
+                                                // Calculate adjusted debt
+                                                const adjustedDebt = (order.is_critical_debt ? order.current_debt : order.remainder_amount) - unpaidFines;
+
+                                                // Determine if stages are effectively paid (debt covered by fines)
+                                                const isEffectivelyPaid = adjustedDebt <= 0.01;
+
+                                                // Stage 1 status
+                                                const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && isEffectivelyPaid && order.advance_remaining <= 0.01);
+
+                                                // Stage 2 status
+                                                const isPaidStage2 = !!order.date_final_paid || (order.date_installation && isEffectivelyPaid);
+
+                                                return (
+                                                    <>
+                                                        {/* Stage 1 */}
+                                                        <td className="p-4 text-center bg-slate-50/20">
+                                                            <div className="flex flex-col items-center">
+                                                                <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                                                    Здано: {formatDate(order.date_to_work)}
+                                                                </span>
+                                                                {order.advance_paid_amount > 0 && order.advance_paid_amount < order.advance_amount && !isPaidStage1 ? (
+                                                                    <span className="text-sm font-black italic mono mb-1 text-yellow-600">
+                                                                        {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className={`text-sm font-black italic mono mb-1 ${isPaidStage1 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
+                                                                        {advanceAmount.toLocaleString()} ₴
+                                                                    </span>
+                                                                )}
+                                                                {isPaidStage1 ? (
+                                                                    <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                        {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                                    </span>
+                                                                ) : order.date_to_work ? (
+                                                                    (() => {
+                                                                        // Calculate fines applied to this stage
+                                                                        const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
+                                                                        const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+
+                                                                        // Assume fines go to advance stage first (same logic as payment distribution)
+                                                                        const fineToAdvance = Math.min(totalFines, order.advance_amount);
+                                                                        const realPayment = order.advance_paid_amount;
+
+                                                                        return (
+                                                                            <div className="text-[10px] font-bold text-red-600 uppercase">
+                                                                                БОРГ
+                                                                                <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
+                                                                                    {realPayment > 0 && (
+                                                                                        <>
+                                                                                            <span className="text-slate-700">{realPayment.toLocaleString()}</span>
+                                                                                            {fineToAdvance > 0 && <span className="text-slate-400">+</span>}
+                                                                                        </>
+                                                                                    )}
+                                                                                    {fineToAdvance > 0 && (
+                                                                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                            {fineToAdvance.toLocaleString()} ШТРАФ
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {(realPayment > 0 || fineToAdvance > 0) && (
+                                                                                        <span className="text-slate-400">/</span>
+                                                                                    )}
+                                                                                    <span className="text-slate-600">
+                                                                                        {(order.advance_amount - realPayment - fineToAdvance).toLocaleString()} ₴
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()
+                                                                ) : (
+                                                                    <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
+                                                                        ОЧІКУЄ
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Stage 2 */}
+                                                        <td className="p-4 text-center bg-emerald-50/20">
+                                                            <div className="flex flex-col items-center">
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                                                    Монтаж: {formatDate(order.date_installation)}
+                                                                </span>
+                                                                <span className={`text-sm font-black italic mono mb-1 ${isPaidStage2 ? 'text-green-600 underline decoration-2' : 'text-slate-300'}`}>
+                                                                    {finalAmount.toLocaleString()} ₴
+                                                                </span>
+                                                                {isPaidStage2 ? (
+                                                                    <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                        {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                                    </span>
+                                                                ) : order.date_installation ? (
+                                                                    (() => {
+                                                                        // Calculate fines applied to this stage
+                                                                        const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
+                                                                        const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+
+                                                                        // Fines go to advance first, then final
+                                                                        const fineToAdvance = Math.min(totalFines, order.advance_amount);
+                                                                        const fineToFinal = Math.max(0, Math.min(totalFines - fineToAdvance, stageAmount));
+                                                                        const realPayment = order.final_paid_amount;
+
+                                                                        return (
+                                                                            <div className="text-[10px] font-bold text-red-600 uppercase">
+                                                                                БОРГ
+                                                                                <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
+                                                                                    {realPayment > 0 && (
+                                                                                        <>
+                                                                                            <span className="text-slate-700">{realPayment.toLocaleString()}</span>
+                                                                                            {fineToFinal > 0 && <span className="text-slate-400">+</span>}
+                                                                                        </>
+                                                                                    )}
+                                                                                    {fineToFinal > 0 && (
+                                                                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                            {fineToFinal.toLocaleString()} ШТРАФ
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {(realPayment > 0 || fineToFinal > 0) && (
+                                                                                        <span className="text-slate-400">/</span>
+                                                                                    )}
+                                                                                    <span className="text-slate-600">
+                                                                                        {(stageAmount - realPayment - fineToFinal).toLocaleString()} ₴
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()
+                                                                ) : (
+                                                                    <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
+                                                                        ОЧІКУЄ
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </>
+                                                );
+                                            })()}
+
+                                            {/* Fines column */}
+                                            {showFinancials && (
+                                                <td className="p-4 text-center bg-orange-50/20">
+                                                    {(() => {
+                                                        const unpaidFines = deductions
+                                                            .filter(d => d.order_id === order.id)
+                                                            .reduce((sum, d) => sum + d.amount, 0);
+
+                                                        if (unpaidFines > 0) {
+                                                            return (
+                                                                <span className="text-sm font-black italic text-orange-600">
+                                                                    {unpaidFines.toLocaleString()} ₴
+                                                                </span>
+                                                            );
+                                                        } else {
+                                                            return <span className="text-xs text-slate-400">—</span>;
+                                                        }
+                                                    })()}
+                                                </td>
+                                            )}
+
+                                            {showFinancials && (
+                                                <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                                    {(() => {
+                                                        const unpaidFines = deductions
+                                                            .filter(d => d.order_id === order.id)
+                                                            .reduce((sum, d) => sum + d.amount, 0);
+
+                                                        let val;
+                                                        if (order.is_critical_debt) {
+                                                            val = order.current_debt - unpaidFines;
+                                                        } else {
+                                                            val = order.remainder_amount - unpaidFines;
+                                                        }
+
+                                                        // Allow negative values (overpayment/fines > remainder)
+                                                        const isNegative = val < -0.01;
                                                         return (
-                                                            <span className="text-sm font-black italic text-orange-600">
-                                                                {unpaidFines.toLocaleString()} ₴
+                                                            <span className={isNegative ? 'text-red-600' : ''}>
+                                                                {val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {isNegative && '₴'}
                                                             </span>
                                                         );
-                                                    } else {
-                                                        return <span className="text-xs text-slate-400">—</span>;
-                                                    }
-                                                })()}
-                                            </td>
-                                        )}
-
-                                        {showFinancials && (
-                                            <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
-                                                {(() => {
-                                                    const unpaidFines = deductions
-                                                        .filter(d => d.order_id === order.id)
-                                                        .reduce((sum, d) => sum + d.amount, 0);
-
-                                                    let val;
-                                                    if (order.is_critical_debt) {
-                                                        val = order.current_debt - unpaidFines;
-                                                    } else {
-                                                        val = order.remainder_amount - unpaidFines;
-                                                    }
-
-                                                    // Allow negative values (overpayment/fines > remainder)
-                                                    const isNegative = val < -0.01;
-                                                    return (
-                                                        <span className={isNegative ? 'text-red-600' : ''}>
-                                                            {val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {isNegative && '₴'}
-                                                        </span>
-                                                    );
-                                                })()}
-                                            </td>
-                                        )}
-                                    </tr>
-                                );
-                            })}
+                                                    })()}
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
 
                     {/* Mobile Card View */}
-                    <div className="md:hidden divide-y divide-slate-100">
+                    <div className="md:hidden divide-y divide-white/20">
                         {filteredOrders.map((order) => {
                             const bonus = order.bonus;
                             const stageAmount = bonus / 2;
@@ -900,7 +909,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                             return (
                                 <div
                                     key={order.id}
-                                    className="p-4 hover:bg-blue-50/20 transition cursor-pointer"
+                                    className="p-4 hover:bg-white/20 transition cursor-pointer bg-white/10 backdrop-blur-md mb-2 rounded-xl border border-white/20"
                                     onClick={() => onSelectOrder(order)}
                                 >
                                     {/* Header: ID + Name */}
@@ -985,19 +994,22 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         })}
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* Empty State */}
-            {!isCalendarMode && filteredOrders.length === 0 && (
-                <div className="text-center py-20">
-                    <div className="inline-block p-6 rounded-full bg-slate-50 mb-4">
-                        <span className="text-4xl">📭</span>
+            {
+                !isCalendarMode && filteredOrders.length === 0 && (
+                    <div className="text-center py-20">
+                        <div className="inline-block p-6 rounded-full bg-slate-50 mb-4">
+                            <span className="text-4xl">📭</span>
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-400">Немає замовлень</h3>
+                        <p className="text-slate-300">Спробуйте змінити фільтри або пошук</p>
                     </div>
-                    <h3 className="text-lg font-bold text-slate-400">Немає замовлень</h3>
-                    <p className="text-slate-300">Спробуйте змінити фільтри або пошук</p>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 
