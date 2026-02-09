@@ -330,7 +330,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             fetchOrders();
         } catch (error) {
             console.error("Failed to update ID:", error);
-            alert("Помилка при зміні ID: " + (error.response?.data?.detail || error.message));
+            const errorMsg = error.response?.data?.detail || error.message || "Невідома помилка";
+            alert(`Помилка при зміні ID: ${errorMsg}`);
         }
     };
 

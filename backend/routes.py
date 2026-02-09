@@ -157,6 +157,13 @@ def fix_database_schema(session: Session = Depends(get_session)):
             session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS email VARCHAR'))
             session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS phone_number VARCHAR'))
             session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS telegram_id VARCHAR'))
+            
+            # Additional User Columns (v1.5)
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS salary_mode VARCHAR DEFAULT 'sales_percent'"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS salary_percent FLOAT DEFAULT 5.0"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage1_percent FLOAT DEFAULT 50.0"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage2_percent FLOAT DEFAULT 50.0"))
+            
             session.commit()
             logs.append(f"SUCCESS with {variant}")
             break # Stop if one worked
@@ -174,7 +181,24 @@ def fix_database_schema(session: Session = Depends(get_session)):
     except:
         session.rollback()
 
-    # 5. Create Default Admin if missing
+    # 5. Order Columns (v1.5)
+    logs.append("Checking Order table columns (v1.5)...")
+    try:
+        # Check for material_cost
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS material_cost FLOAT DEFAULT 0.0')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS fixed_bonus FLOAT')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS custom_stage1_percent FLOAT')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS custom_stage2_percent FLOAT')
+        
+        # Fallback for unquoted
+        run_sql('ALTER TABLE order ADD COLUMN material_cost FLOAT DEFAULT 0.0')
+        run_sql('ALTER TABLE order ADD COLUMN fixed_bonus FLOAT')
+        run_sql('ALTER TABLE order ADD COLUMN custom_stage1_percent FLOAT')
+        run_sql('ALTER TABLE order ADD COLUMN custom_stage2_percent FLOAT')
+    except:
+        pass
+
+    # 6. Create Default Admin if missing
     logs.append("Checking for admin user...")
     try:
         admin_exists = session.exec(select(User).where(User.username == "admin")).first()
