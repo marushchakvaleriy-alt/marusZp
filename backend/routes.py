@@ -1010,9 +1010,18 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
     try:
         # 3. RESTORE DATA (Parent tables first)
         
-        # Helper to convert ID strings to ints if needed (JSON keys are always strings)
-        # But here we are loading list of dicts, so IDs should be ints if validation passes.
-        
+        def parse_date(date_str):
+            if not date_str: return None
+            try:
+                # Handle YYYY-MM-DD
+                return datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                # Fallback for full ISO format if present
+                try:
+                    return datetime.fromisoformat(date_str).date()
+                except:
+                    return None
+
         # USERS
         for item in data.get("users", []):
             session.add(User(**item))
@@ -1020,14 +1029,20 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
             
         # ORDERS
         for item in data.get("orders", []):
-            # Handle date fields that might be strings in JSON
-            # SQLModel/Pydantic should handle string->date conversion automatically usually
-            # But let's be safe if needed. For now assume auto-conversion works.
+            # Manually parse date fields
+            if "date_received" in item: item["date_received"] = parse_date(item["date_received"])
+            if "date_design_deadline" in item: item["date_design_deadline"] = parse_date(item["date_design_deadline"])
+            if "date_to_work" in item: item["date_to_work"] = parse_date(item["date_to_work"])
+            if "date_installation" in item: item["date_installation"] = parse_date(item["date_installation"])
+            if "date_advance_paid" in item: item["date_advance_paid"] = parse_date(item["date_advance_paid"])
+            if "date_final_paid" in item: item["date_final_paid"] = parse_date(item["date_final_paid"])
+            
             session.add(Order(**item))
         session.flush()
 
         # PAYMENTS
         for item in data.get("payments", []):
+            if "date_received" in item: item["date_received"] = parse_date(item["date_received"])
             session.add(Payment(**item))
         session.flush()
 
@@ -1037,10 +1052,21 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
         
         # DEDUCTIONS
         for item in data.get("deductions", []):
+            if "date_created" in item: item["date_created"] = parse_date(item["date_created"])
+            if "date_paid" in item: item["date_paid"] = parse_date(item["date_paid"])
             session.add(Deduction(**item))
             
         # ACTIVITY LOGS
         for item in data.get("activity_logs", []):
+            # Timestamp might be string, but ActivityLog usually defines specific type?
+            # If ActivityLog uses String for timestamp, we are fine. 
+            # If it uses DateTime/Date, we need to parse.
+            # Based on models.py (implied), timestamp is likely string in this project based on logs I saw.
+            # But let's check one log entry from backup: "timestamp":"2026-02-08" (looks like string date)
+            # or "2026-02-08T12:17:31..."
+            # If the model expects string, we leave it. If it expects datetime, we must parse.
+            # Let's assume it handles string or is defined as string for now, 
+            # as the error specifically mentioned "SQLite Date type" which refers to `date` columns.
             session.add(ActivityLog(**item))
             
         # FILES
