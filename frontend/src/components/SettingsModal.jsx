@@ -131,6 +131,55 @@ const SettingsModal = ({ onClose }) => {
                                     >
                                         <span className="text-lg">📥</span> Скачати базу даних (JSON)
                                     </button>
+
+                                    <div className="mt-4 pt-4 border-t border-amber-200">
+                                        <p className="text-sm text-red-600 font-bold mb-2">♨️ Відновлення (Імпорт)</p>
+                                        <p className="text-xs text-slate-500 mb-2">
+                                            Це повністю <u>ВИДАЛИТЬ</u> поточні дані і замінить їх даними з файлу.
+                                        </p>
+                                        <label className="w-full py-2 bg-red-50 border border-red-300 text-red-700 font-bold rounded-lg hover:bg-red-100 transition flex items-center justify-center gap-2 text-xs uppercase cursor-pointer">
+                                            <span className="text-lg">♻️</span> Завантажити Backup файл
+                                            <input
+                                                type="file"
+                                                accept=".json"
+                                                className="hidden"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files[0];
+                                                    if (!file) return;
+
+                                                    if (!confirm("⚠️ УВАГА! Всі поточні дані буде видалено і замінено даними з файлу.\n\nВи впевнені?")) return;
+
+                                                    const formData = new FormData();
+                                                    formData.append('file', file);
+
+                                                    try {
+                                                        const token = localStorage.getItem('token');
+                                                        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+                                                        const res = await fetch(`${baseUrl}/admin/restore`, {
+                                                            method: 'POST',
+                                                            headers: {
+                                                                'Authorization': `Bearer ${token}`
+                                                            },
+                                                            body: formData
+                                                        });
+
+                                                        if (!res.ok) {
+                                                            const err = await res.json();
+                                                            throw new Error(err.detail || "Upload failed");
+                                                        }
+
+                                                        alert("Базу даних успішно відновлено! 🔄\nСторінка буде перезавантажена.");
+                                                        window.location.reload();
+
+                                                    } catch (err) {
+                                                        alert("Помилка відновлення: " + err.message);
+                                                        console.error(err);
+                                                    }
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 

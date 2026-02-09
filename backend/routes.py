@@ -982,6 +982,83 @@ def backup_database(current_user: User = Depends(get_admin_user), session: Sessi
     )
 
 
+@router.post("/admin/restore")
+def restore_database(file: UploadFile = File(...), current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
+    import json
+    from sqlmodel import delete
+    
+    # 1. Read and parse JSON
+    try:
+        content = file.file.read()
+        backup = json.loads(content)
+        data = backup.get("data")
+        if not data:
+            raise ValueError("Invalid backup format: missing 'data' field")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid backup file: {e}")
+        
+    # 2. CLEAR ALL DATA (Order matters for Foreign Keys!)
+    # Child tables first
+    session.exec(delete(PaymentAllocation))
+    session.exec(delete(Deduction))
+    session.exec(delete(OrderFile))
+    session.exec(delete(ActivityLog))
+    session.exec(delete(Payment))
+    session.exec(delete(Order))
+    session.exec(delete(User))
+    
+    try:
+        # 3. RESTORE DATA (Parent tables first)
+        
+        # Helper to convert ID strings to ints if needed (JSON keys are always strings)
+        # But here we are loading list of dicts, so IDs should be ints if validation passes.
+        
+        # USERS
+        for item in data.get("users", []):
+            session.add(User(**item))
+        session.flush() # Ensure IDs are claimed
+            
+        # ORDERS
+        for item in data.get("orders", []):
+            # Handle date fields that might be strings in JSON
+            # SQLModel/Pydantic should handle string->date conversion automatically usually
+            # But let's be safe if needed. For now assume auto-conversion works.
+            session.add(Order(**item))
+        session.flush()
+
+        # PAYMENTS
+        for item in data.get("payments", []):
+            session.add(Payment(**item))
+        session.flush()
+
+        # ALLOCATIONS
+        for item in data.get("allocations", []):
+            session.add(PaymentAllocation(**item))
+        
+        # DEDUCTIONS
+        for item in data.get("deductions", []):
+            session.add(Deduction(**item))
+            
+        # ACTIVITY LOGS
+        for item in data.get("activity_logs", []):
+            session.add(ActivityLog(**item))
+            
+        # FILES
+        for item in data.get("order_files", []):
+            session.add(OrderFile(**item))
+            
+        session.commit()
+        
+        log_activity(session, "SYSTEM_RESTORE", f"Базу даних відновлено з файлу {file.filename}")
+        return {"message": "Database restored successfully", "details": f"Version: {backup.get('version')}, Timestamp: {backup.get('timestamp')}"}
+        
+    except Exception as e:
+        session.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+
+
 # --- ADMIN SETTINGS ---
 @router.get("/admin/settings", response_model=Settings)
 def get_settings(current_user: User = Depends(get_admin_user)):
