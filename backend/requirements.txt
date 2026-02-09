@@ -7,3 +7,4 @@ passlib[bcrypt]
 bcrypt
 gunicorn
 psycopg2-binary
+requests
