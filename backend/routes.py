@@ -940,6 +940,48 @@ def reset_database(request: ResetRequest, session: Session = Depends(get_session
     return {"message": "All data has been reset"}
 
 
+# --- BACKUP ---
+@router.get("/admin/backup")
+def backup_database(current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
+    from datetime import datetime
+    from fastapi.responses import JSONResponse
+    
+    # 1. Fetch all data
+    users = session.exec(select(User)).all()
+    orders = session.exec(select(Order)).all()
+    payments = session.exec(select(Payment)).all()
+    allocations = session.exec(select(PaymentAllocation)).all()
+    deductions = session.exec(select(Deduction)).all()
+    logs = session.exec(select(ActivityLog)).all()
+    files = session.exec(select(OrderFile)).all()
+    
+    # 2. Serialize (using SQLModel's .dict() or similar)
+    # We use jsonable_encoder to handle datetime serialization automatically
+    from fastapi.encoders import jsonable_encoder
+    
+    backup_data = {
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0",
+        "data": {
+            "users": jsonable_encoder(users),
+            "orders": jsonable_encoder(orders),
+            "payments": jsonable_encoder(payments),
+            "allocations": jsonable_encoder(allocations),
+            "deductions": jsonable_encoder(deductions),
+            "activity_logs": jsonable_encoder(logs),
+            "order_files": jsonable_encoder(files)
+        }
+    }
+    
+    # 3. Return as downloadable file
+    filename = f"backup_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.json"
+    
+    return JSONResponse(
+        content=backup_data,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 # --- ADMIN SETTINGS ---
 @router.get("/admin/settings", response_model=Settings)
 def get_settings(current_user: User = Depends(get_admin_user)):

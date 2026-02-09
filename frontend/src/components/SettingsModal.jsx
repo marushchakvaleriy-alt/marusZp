@@ -87,6 +87,53 @@ const SettingsModal = ({ onClose }) => {
                                 </div>
                             </div>
 
+                            {/* Database Backup Section */}
+                            <div>
+                                <h4 className="font-bold text-slate-700 mb-3 border-b pb-1">💾 Резервна копія</h4>
+                                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-4">
+                                    <p className="text-sm text-amber-700 mb-2">
+                                        Ви можете завантажити повну копію бази даних у форматі JSON.
+                                        Це корисно для збереження історії або перенесення даних.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            // Direct download link using configured API URL
+                                            const token = localStorage.getItem('token');
+                                            // Get base URL from axios instance or env
+                                            // api.defaults.baseURL might be undefined if set via create() config object only in some axios versions, 
+                                            // but we can import 'api' and use it.
+                                            // However, for fetch we need the string. 
+                                            // Let's rely on the same logic as api.js:
+                                            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+                                            fetch(`${baseUrl}/admin/backup`, {
+                                                headers: {
+                                                    'Authorization': `Bearer ${token}`
+                                                }
+                                            })
+                                                .then(response => {
+                                                    if (!response.ok) throw new Error("Network response was not ok");
+                                                    return response.blob();
+                                                })
+                                                .then(blob => {
+                                                    const url = window.URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = url;
+                                                    a.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
+                                                    document.body.appendChild(a);
+                                                    a.click();
+                                                    window.URL.revokeObjectURL(url);
+                                                })
+                                                .catch(err => alert("Помилка завантаження: " + err.message));
+                                        }}
+                                        className="w-full py-2 bg-white border border-amber-300 text-amber-700 font-bold rounded-lg hover:bg-amber-100 transition flex items-center justify-center gap-2 text-xs uppercase"
+                                    >
+                                        <span className="text-lg">📥</span> Скачати базу даних (JSON)
+                                    </button>
+                                </div>
+                            </div>
+
                             {/* Telegram Bot Section */}
                             <div>
                                 <div className="flex items-center justify-between mb-3 border-b pb-1">
