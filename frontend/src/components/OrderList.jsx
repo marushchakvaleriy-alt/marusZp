@@ -708,11 +708,14 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                         <UKDatePicker
                                                             selected={order.date_installation_plan}
                                                             onChange={async (date) => {
+                                                                console.log('Planned installation date changed:', date);
                                                                 try {
                                                                     await updateOrder(order.id, { date_installation_plan: date || null });
-                                                                    fetchOrders();
+                                                                    console.log('Update successful, refreshing orders...');
+                                                                    await fetchOrders();
                                                                 } catch (err) {
-                                                                    alert("Помилка оновлення дати монтажу");
+                                                                    console.error('Failed to update planned installation date:', err);
+                                                                    alert(`Помилка оновлення дати монтажу: ${err.message || err}`);
                                                                 }
                                                             }}
                                                             className="w-28 text-[12px] font-bold p-1 bg-white border border-slate-200 rounded shadow-sm text-purple-600 focus:border-purple-500"
