@@ -129,7 +129,7 @@ function App() {
             >
                 {getSeasonIcon()}
             </button>
-            <div className="w-full mx-auto relative z-10">
+            <div className="max-w-[1900px] mx-auto relative z-10">
                 {currentView === 'list' && (
                     <>
                         <Dashboard refreshTrigger={statsRefreshKey} />

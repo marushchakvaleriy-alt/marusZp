@@ -272,7 +272,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
     useEffect(() => {
         if (canManage) {
-            getUsers().then(setConstructors).catch(console.error);
+            getUsers().then(users => {
+                // Filter only constructors
+                const constructorUsers = users.filter(u => u.role === 'constructor');
+                setConstructors(constructorUsers);
+            }).catch(console.error);
         }
     }, [canManage]);
 
@@ -553,15 +557,15 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                         <span className="opacity-0 group-hover:opacity-30 text-slate-400">↕</span>
                                     </div>
                                 </th>
-                                <th className="p-4 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
-                                <th className="p-4 border-b text-center font-bold text-red-500">Дедлайн</th>
-                                {(canManage) && <th className="p-4 border-b text-center font-bold text-purple-500">План. монтаж</th>}
-                                {showFinancials && <th className="p-4 border-b text-right font-bold">Вартість</th>}
-                                {showFinancials && <th className="p-4 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
-                                <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>
-                                <th className="p-4 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>
-                                {showFinancials && <th className="p-4 border-b text-center font-bold text-orange-600 bg-orange-50/10">Штрафи</th>}
-                                {showFinancials && <th className="p-4 pr-6 border-b text-right font-bold">Борг/Залишок</th>}
+                                <th className="p-1 px-2 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
+                                <th className="p-1 px-2 border-b text-center font-bold text-red-500">Дедлайн</th>
+                                {(canManage) && <th className="p-1 px-2 border-b text-center font-bold text-purple-500">План. монтаж</th>}
+                                {showFinancials && <th className="p-1 px-2 border-b text-right font-bold">Вартість</th>}
+                                {showFinancials && <th className="p-1 px-2 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
+                                <th className="p-1 px-2 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>
+                                <th className="p-1 px-2 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>
+                                {showFinancials && <th className="p-1 px-2 border-b text-center font-bold text-orange-600 bg-orange-50/10">Штрафи</th>}
+                                {showFinancials && <th className="p-1 px-2 border-b text-right font-bold">Борг/Залишок</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200/20">
@@ -584,7 +588,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                     return (
                                         <tr key={order.id} className="hover:bg-white/10 transition cursor-pointer group" onClick={() => onSelectOrder(order)}>
-                                            <td className="p-4 pl-6 text-slate-300 font-bold italic text-sm group-hover:text-blue-500 transition-colors">
+                                            <td className="p-1 pl-3 text-slate-300 font-bold italic text-sm group-hover:text-blue-500 transition-colors">
                                                 <div className="flex items-center gap-2">
                                                     #{order.id}
                                                     <button
@@ -597,7 +601,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 </div>
                                             </td>
 
-                                            <td className="p-4">
+                                            <td className="p-1 px-2">
                                                 <div className="font-black text-slate-800 italic text-base">{order.name}</div>
                                                 {/* Constructor Name Display / Edit */}
                                                 <div onClick={(e) => e.stopPropagation()} className="mt-1">
@@ -651,7 +655,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 })()}
                                             </td>
 
-                                            <td className="p-4 text-center">
+                                            <td className="p-1 px-2 text-center">
                                                 <span className="text-sm font-bold text-purple-600 italic">
                                                     {formatDate(order.date_received)}
                                                 </span>
@@ -699,7 +703,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                             {/* Planned Installation (Manager/Admin Only) - SEPARATE COLUMN */}
                                             {(canManage) && (
-                                                <td className="p-4 text-center">
+                                                <td className="p-1 px-2 text-center">
                                                     <div className="flex justify-center" onClick={e => e.stopPropagation()}>
                                                         <UKDatePicker
                                                             selected={order.date_installation_plan}
@@ -719,10 +723,10 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                             {showFinancials && (
                                                 <>
-                                                    <td className="p-4 text-right font-bold text-slate-600 italic mono">
+                                                    <td className="p-1 px-2 text-right font-bold text-slate-600 italic mono">
                                                         {order.price.toLocaleString()}
                                                     </td>
-                                                    <td className="p-4 text-right font-black text-blue-600 italic text-lg mono">
+                                                    <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
                                                         {bonus.toLocaleString()}
                                                     </td>
                                                 </>
@@ -749,7 +753,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 return (
                                                     <>
                                                         {/* Stage 1 */}
-                                                        <td className="p-4 text-center bg-slate-50/20">
+                                                        <td className="p-1 px-2 text-center bg-slate-50/20">
                                                             <div className="flex flex-col items-center">
                                                                 <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
                                                                     Здано: {formatDate(order.date_to_work)}
@@ -811,7 +815,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                         </td>
 
                                                         {/* Stage 2 */}
-                                                        <td className="p-4 text-center bg-emerald-50/20">
+                                                        <td className="p-1 px-2 text-center bg-emerald-50/20">
                                                             <div className="flex flex-col items-center">
                                                                 <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">
                                                                     Монтаж: {formatDate(order.date_installation)}
@@ -872,7 +876,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                             {/* Fines column */}
                                             {showFinancials && (
-                                                <td className="p-4 text-center bg-orange-50/20">
+                                                <td className="p-1 px-2 text-center bg-orange-50/20">
                                                     {(() => {
                                                         const unpaidFines = deductions
                                                             .filter(d => d.order_id === order.id)
