@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { addPayment, getOrders, getUsers } from '../api';
+import UKDatePicker from './UKDatePicker';
 
 const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -132,12 +133,10 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
 
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Дата отримання</label>
-                            <input
-                                type="date"
-                                required
+                            <UKDatePicker
+                                selected={formData.date_received}
+                                onChange={date => setFormData({ ...formData, date_received: date })}
                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                                value={formData.date_received}
-                                onChange={e => setFormData({ ...formData, date_received: e.target.value })}
                             />
                         </div>
 

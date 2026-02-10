@@ -265,6 +265,32 @@ def migrate():
                 except Exception as e:
                     logger.error(f"Failed to add 'custom_stage2_percent': {e}")
                     session.rollback()
+                except Exception as e:
+                    logger.error(f"Failed to add 'custom_stage2_percent': {e}")
+                    session.rollback()
+            
+            # Check for date_installation_plan (v1.6)
+            try:
+                session.exec(text("SELECT date_installation_plan FROM \"order\" LIMIT 1"))
+                logger.info("Column 'date_installation_plan' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'date_installation_plan' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN date_installation_plan DATE"))
+                    session.commit()
+                    logger.info("Added 'date_installation_plan' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'date_installation_plan': {e}")
+                    session.rollback()
+                    try:
+                        session.connection().execute(text("ALTER TABLE order ADD COLUMN date_installation_plan DATE"))
+                        session.commit()
+                        logger.info("Added 'date_installation_plan' column (unquoted).")
+                    except Exception as e2:
+                        logger.error(f"Failed to add 'date_installation_plan' (unquoted): {e2}")
+                        session.rollback()
+
         except Exception as outer_e:
             logger.error(f"Error checking order columns: {outer_e}")
             session.rollback()

@@ -4,6 +4,7 @@ import PaymentModal from './PaymentModal';
 import SettingsModal from './SettingsModal';
 import CalendarView from './CalendarView';
 import { useAuth } from '../context/AuthContext';
+import UKDatePicker from './UKDatePicker';
 
 
 const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
@@ -176,11 +177,10 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Дата дедлайну (Конструктив)</label>
-                        <input
-                            type="date"
+                        <UKDatePicker
+                            selected={formData.date_design_deadline}
+                            onChange={date => setFormData({ ...formData, date_design_deadline: date })}
                             className="w-full p-3 bg-slate-50 border border-red-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-red-500"
-                            value={formData.date_design_deadline || ''}
-                            onChange={e => setFormData({ ...formData, date_design_deadline: e.target.value })}
                         />
                     </div>
 
@@ -555,6 +555,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                 </th>
                                 <th className="p-4 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
                                 <th className="p-4 border-b text-center font-bold text-red-500">Дедлайн</th>
+                                {(canManage) && <th className="p-4 border-b text-center font-bold text-purple-500">План. монтаж</th>}
                                 {showFinancials && <th className="p-4 border-b text-right font-bold">Вартість</th>}
                                 {showFinancials && <th className="p-4 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
                                 <th className="p-4 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>
@@ -660,22 +661,21 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 {/* Design Deadline Input (Admin Only) */}
                                                 {isAdmin && !isPaidStage1 && (
                                                     <div className="flex justify-center" onClick={e => e.stopPropagation()}>
-                                                        <input
-                                                            type="date"
-                                                            className={`w-28 text-[12px] font-bold p-1 bg-white border rounded shadow-sm focus:border-blue-500 ${!order.date_to_work && order.date_design_deadline && new Date() > new Date(order.date_design_deadline)
-                                                                ? 'border-red-400 text-red-600'
-                                                                : 'border-slate-200 text-slate-700'
-                                                                }`}
-                                                            value={order.date_design_deadline || ''}
-                                                            onChange={async (e) => {
+                                                        <UKDatePicker
+                                                            selected={order.date_design_deadline}
+                                                            onChange={async (date) => {
                                                                 try {
-                                                                    await updateOrder(order.id, { date_design_deadline: e.target.value || null });
+                                                                    await updateOrder(order.id, { date_design_deadline: date || null });
                                                                     fetchOrders();
                                                                 } catch (err) {
                                                                     console.error("Failed to update deadline", err);
                                                                     alert("Помилка оновлення дедлайну");
                                                                 }
                                                             }}
+                                                            className={`w-28 text-[12px] font-bold p-1 bg-white border rounded shadow-sm focus:border-blue-500 ${!order.date_to_work && order.date_design_deadline && new Date() > new Date(order.date_design_deadline)
+                                                                ? 'border-red-400 text-red-600'
+                                                                : 'border-slate-200 text-slate-700'
+                                                                }`}
                                                         />
                                                     </div>
                                                 )}
@@ -696,6 +696,26 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                     <span className="text-slate-300 text-xs">—</span>
                                                 )}
                                             </td>
+
+                                            {/* Planned Installation (Manager/Admin Only) - SEPARATE COLUMN */}
+                                            {(canManage) && (
+                                                <td className="p-4 text-center">
+                                                    <div className="flex justify-center" onClick={e => e.stopPropagation()}>
+                                                        <UKDatePicker
+                                                            selected={order.date_installation_plan}
+                                                            onChange={async (date) => {
+                                                                try {
+                                                                    await updateOrder(order.id, { date_installation_plan: date || null });
+                                                                    fetchOrders();
+                                                                } catch (err) {
+                                                                    alert("Помилка оновлення дати монтажу");
+                                                                }
+                                                            }}
+                                                            className="w-28 text-[12px] font-bold p-1 bg-white border border-slate-200 rounded shadow-sm text-purple-600 focus:border-purple-500"
+                                                        />
+                                                    </div>
+                                                </td>
+                                            )}
 
                                             {showFinancials && (
                                                 <>

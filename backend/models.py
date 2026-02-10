@@ -81,6 +81,7 @@ class OrderBase(SQLModel):
     fixed_bonus: Optional[float] = Field(default=None)  # Manager override for exact bonus amount
     custom_stage1_percent: Optional[float] = Field(default=None)  # Override stage 1 %
     custom_stage2_percent: Optional[float] = Field(default=None)  # Override stage 2 %
+    date_installation_plan: Optional[date] = None  # Manager's planned date (No effect on constructor)
 
 class Order(OrderBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -115,7 +116,9 @@ class OrderUpdate(SQLModel):
     constructor_id: Optional[int] = None
     fixed_bonus: Optional[float] = None
     custom_stage1_percent: Optional[float] = None
+    custom_stage1_percent: Optional[float] = None
     custom_stage2_percent: Optional[float] = None
+    date_installation_plan: Optional[date] = None  # v1.6 Manager Plan
 
 class OrderRead(OrderBase):
     id: int
@@ -197,14 +200,20 @@ class OrderRead(OrderBase):
             id=order.id,
             name=order.name,
             price=order.price,
+            material_cost=order.material_cost,
             product_types=order.product_types,
             date_received=order.date_received,
+            date_design_deadline=order.date_design_deadline,
             date_to_work=order.date_to_work,
             date_advance_paid=date_advance_paid or order.date_advance_paid,
             date_installation=order.date_installation,
+            date_installation_plan=order.date_installation_plan,
             date_final_paid=date_final_paid or order.date_final_paid,
             advance_paid_amount=order.advance_paid_amount,
             final_paid_amount=order.final_paid_amount,
+            fixed_bonus=order.fixed_bonus,
+            custom_stage1_percent=order.custom_stage1_percent,
+            custom_stage2_percent=order.custom_stage2_percent,
             bonus=bonus,
             advance_amount=advance_amount,
             advance_remaining=advance_remaining,
@@ -218,8 +227,7 @@ class OrderRead(OrderBase):
                 (order.date_installation is not None and (date_final_paid is None and order.date_final_paid is None))
             ),
             status_payment=status,
-            constructor_id=order.constructor_id,
-            date_design_deadline=order.date_design_deadline
+            constructor_id=order.constructor_id
         )
 
     def __init__(self, **kwargs):

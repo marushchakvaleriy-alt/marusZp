@@ -127,6 +127,27 @@ def fix_database_schema(session: Session = Depends(get_session)):
     logs.append("Attempting to add date_design_deadline...")
     run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_design_deadline DATE')
     run_sql('ALTER TABLE order ADD COLUMN date_design_deadline DATE')
+    
+    # 2b. Planned Installation Date (Manager View)
+    logs.append("Attempting to add date_installation_plan...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_installation_plan DATE')
+    run_sql('ALTER TABLE order ADD COLUMN date_installation_plan DATE')
+    
+    # 2c. Material Cost
+    logs.append("Attempting to add material_cost...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS material_cost FLOAT DEFAULT 0.0')
+    run_sql('ALTER TABLE order ADD COLUMN material_cost REAL DEFAULT 0.0')
+    
+    # 2d. Fixed Bonus and Custom Stage Percentages
+    logs.append("Attempting to add fixed_bonus and custom stage percentages...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS fixed_bonus FLOAT')
+    run_sql('ALTER TABLE order ADD COLUMN fixed_bonus REAL')
+    
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS custom_stage1_percent FLOAT')
+    run_sql('ALTER TABLE order ADD COLUMN custom_stage1_percent REAL')
+    
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS custom_stage2_percent FLOAT')
+    run_sql('ALTER TABLE order ADD COLUMN custom_stage2_percent REAL')
 
     # 3. Payment Columns (allocated_automatically, notes, manual_order_id)
     logs.append("Checking Payment table columns...")
@@ -195,6 +216,10 @@ def fix_database_schema(session: Session = Depends(get_session)):
         run_sql('ALTER TABLE order ADD COLUMN fixed_bonus FLOAT')
         run_sql('ALTER TABLE order ADD COLUMN custom_stage1_percent FLOAT')
         run_sql('ALTER TABLE order ADD COLUMN custom_stage2_percent FLOAT')
+        
+        # v1.6 Manager Plan
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_installation_plan DATE')
+        run_sql('ALTER TABLE order ADD COLUMN date_installation_plan DATE')
     except:
         pass
 
