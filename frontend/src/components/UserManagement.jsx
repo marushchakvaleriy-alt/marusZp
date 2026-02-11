@@ -17,7 +17,6 @@ const UserManagement = ({ onBack }) => {
         card_number: '',
         email: '',
         phone_number: '',
-        phone_number: '',
         telegram_id: '',
         salary_mode: 'sales_percent',
         salary_percent: 5.0,
