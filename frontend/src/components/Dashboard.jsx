@@ -149,10 +149,12 @@ const Dashboard = ({ refreshTrigger }) => {
     return (
         <div className="space-y-6 mb-10">
             {/* Global Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
-                <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
-            </div>
+            {(isAdmin || user?.role === 'constructor' || (user?.role === 'manager' && user?.can_see_dashboard === true)) && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <StatCard title="Загальний борг" value={stats.totalDebt} type="red" />
+                    <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="yellow" />
+                </div>
+            )}
 
             {/* Per-Constructor Stats (Admin Only) */}
             {

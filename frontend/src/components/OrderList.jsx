@@ -252,22 +252,26 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     // Managers can manage orders, but double check role isn't constructor or undefined
     const canManage = (isAdmin || isManager) && user?.role !== 'constructor';
 
-    // Show financials to Admin only? Or Manager too? 
-    // Requirement says Manager manages constructors and sees info.
-    // Let's assume Manager sees financials for now, or maybe restricted?
-    // User requested: "менеджер також має можливість розподіляти замовлення по конструкторам і бачити інформацію на кому зараз задача"
-    // Does not explicitly say "see money". But usually manager needs to know price.
-    // Let's keep showFinancials = !isManager (from previous code) or change it?
-    // Previous code: const showFinancials = !isManager; 
-    // Wait, if !isManager, then Admin sees it (true), Constructor (role='constructor') sees it (true? no, user.role!='manager' is true for constructor).
-    // Logic error in previous code?
-    // user.role is 'admin', 'manager', 'constructor'.
-    // if role='admin', showFinancials = true.
-    // if role='constructor', showFinancials = true.
-    // if role='manager', showFinancials = false.
-    // This seems weird. Everyone sees financials except manager?
-    // Let's fix this: Admin sees all. Constructor sees their own partials (handled by backend usually). 
-    // Manager probably should see financials too.
+    // Granular Permissions for Columns
+    // Admin sees everything, Constructor sees own data
+    // Manager - depends on individual permissions
+    const canSeeConstructorPay = isAdmin ||
+        user?.role === 'constructor' ||
+        (isManager && user?.can_see_constructor_pay === true);
+
+    const canSeeStage1 = isAdmin ||
+        user?.role === 'constructor' ||
+        (isManager && user?.can_see_stage1 === true);
+
+    const canSeeStage2 = isAdmin ||
+        user?.role === 'constructor' ||
+        (isManager && user?.can_see_stage2 === true);
+
+    const canSeeDebt = isAdmin ||
+        user?.role === 'constructor' ||
+        (isManager && user?.can_see_debt === true);
+
+    // Keep showFinancials for price column and fines
     const showFinancials = true;
 
     useEffect(() => {
@@ -561,11 +565,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                 <th className="p-1 px-2 border-b text-center font-bold text-red-500">Дедлайн</th>
                                 {(canManage) && <th className="p-1 px-2 border-b text-center font-bold text-purple-500">План. монтаж</th>}
                                 {showFinancials && <th className="p-1 px-2 border-b text-right font-bold">Вартість</th>}
-                                {showFinancials && <th className="p-1 px-2 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
-                                <th className="p-1 px-2 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>
-                                <th className="p-1 px-2 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>
+                                {canSeeConstructorPay && <th className="p-1 px-2 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
+                                {canSeeStage1 && <th className="p-1 px-2 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>}
+                                {canSeeStage2 && <th className="p-1 px-2 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>}
                                 {showFinancials && <th className="p-1 px-2 border-b text-center font-bold text-orange-600 bg-orange-50/10">Штрафи</th>}
-                                {showFinancials && <th className="p-1 px-2 border-b text-right font-bold">Борг/Залишок</th>}
+                                {canSeeDebt && <th className="p-1 px-2 border-b text-right font-bold">Борг/Залишок</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200/20">
@@ -725,14 +729,15 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                             )}
 
                                             {showFinancials && (
-                                                <>
-                                                    <td className="p-1 px-2 text-right font-bold text-slate-600 italic mono">
-                                                        {order.price.toLocaleString()}
-                                                    </td>
-                                                    <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
-                                                        {bonus.toLocaleString()}
-                                                    </td>
-                                                </>
+                                                <td className="p-1 px-2 text-right font-bold text-slate-600 italic mono">
+                                                    {order.price.toLocaleString()}
+                                                </td>
+                                            )}
+
+                                            {canSeeConstructorPay && (
+                                                <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
+                                                    {bonus.toLocaleString()}
+                                                </td>
                                             )}
 
                                             {(() => {
@@ -756,123 +761,127 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 return (
                                                     <>
                                                         {/* Stage 1 */}
-                                                        <td className="p-1 px-2 text-center bg-slate-50/20">
-                                                            <div className="flex flex-col items-center">
-                                                                <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
-                                                                    Здано: {formatDate(order.date_to_work)}
-                                                                </span>
-                                                                {order.advance_paid_amount > 0 && order.advance_paid_amount < order.advance_amount && !isPaidStage1 ? (
-                                                                    <span className="text-sm font-black italic mono mb-1 text-yellow-600">
-                                                                        {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
+                                                        {canSeeStage1 && (
+                                                            <td className="p-1 px-2 text-center bg-slate-50/20">
+                                                                <div className="flex flex-col items-center">
+                                                                    <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                                                        Здано: {formatDate(order.date_to_work)}
                                                                     </span>
-                                                                ) : (
-                                                                    <span className={`text-sm font-black italic mono mb-1 ${isPaidStage1 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
-                                                                        {advanceAmount.toLocaleString()} ₴
-                                                                    </span>
-                                                                )}
-                                                                {isPaidStage1 ? (
-                                                                    <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
-                                                                        {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
-                                                                    </span>
-                                                                ) : order.date_to_work ? (
-                                                                    (() => {
-                                                                        // Calculate fines applied to this stage
-                                                                        const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
-                                                                        const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+                                                                    {order.advance_paid_amount > 0 && order.advance_paid_amount < order.advance_amount && !isPaidStage1 ? (
+                                                                        <span className="text-sm font-black italic mono mb-1 text-yellow-600">
+                                                                            {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className={`text-sm font-black italic mono mb-1 ${isPaidStage1 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
+                                                                            {advanceAmount.toLocaleString()} ₴
+                                                                        </span>
+                                                                    )}
+                                                                    {isPaidStage1 ? (
+                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                            {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                                        </span>
+                                                                    ) : order.date_to_work ? (
+                                                                        (() => {
+                                                                            // Calculate fines applied to this stage
+                                                                            const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
+                                                                            const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
 
-                                                                        // Assume fines go to advance stage first (same logic as payment distribution)
-                                                                        const fineToAdvance = Math.min(totalFines, order.advance_amount);
-                                                                        const realPayment = order.advance_paid_amount;
+                                                                            // Assume fines go to advance stage first (same logic as payment distribution)
+                                                                            const fineToAdvance = Math.min(totalFines, order.advance_amount);
+                                                                            const realPayment = order.advance_paid_amount;
 
-                                                                        return (
-                                                                            <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                                БОРГ
-                                                                                <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
-                                                                                    {realPayment > 0 && (
-                                                                                        <>
-                                                                                            <span className="text-slate-700">{realPayment.toLocaleString()}</span>
-                                                                                            {fineToAdvance > 0 && <span className="text-slate-400">+</span>}
-                                                                                        </>
-                                                                                    )}
-                                                                                    {fineToAdvance > 0 && (
-                                                                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                            {fineToAdvance.toLocaleString()} ШТРАФ
+                                                                            return (
+                                                                                <div className="text-[10px] font-bold text-red-600 uppercase">
+                                                                                    БОРГ
+                                                                                    <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
+                                                                                        {realPayment > 0 && (
+                                                                                            <>
+                                                                                                <span className="text-slate-700">{realPayment.toLocaleString()}</span>
+                                                                                                {fineToAdvance > 0 && <span className="text-slate-400">+</span>}
+                                                                                            </>
+                                                                                        )}
+                                                                                        {fineToAdvance > 0 && (
+                                                                                            <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                                {fineToAdvance.toLocaleString()} ШТРАФ
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {(realPayment > 0 || fineToAdvance > 0) && (
+                                                                                            <span className="text-slate-400">/</span>
+                                                                                        )}
+                                                                                        <span className="text-slate-600">
+                                                                                            {(order.advance_amount - realPayment - fineToAdvance).toLocaleString()} ₴
                                                                                         </span>
-                                                                                    )}
-                                                                                    {(realPayment > 0 || fineToAdvance > 0) && (
-                                                                                        <span className="text-slate-400">/</span>
-                                                                                    )}
-                                                                                    <span className="text-slate-600">
-                                                                                        {(order.advance_amount - realPayment - fineToAdvance).toLocaleString()} ₴
-                                                                                    </span>
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        );
-                                                                    })()
-                                                                ) : (
-                                                                    <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
-                                                                        ОЧІКУЄ
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </td>
+                                                                            );
+                                                                        })()
+                                                                    ) : (
+                                                                        <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
+                                                                            ОЧІКУЄ
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        )}
 
                                                         {/* Stage 2 */}
-                                                        <td className="p-1 px-2 text-center bg-emerald-50/20">
-                                                            <div className="flex flex-col items-center">
-                                                                <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                                                    Монтаж: {formatDate(order.date_installation)}
-                                                                </span>
-                                                                <span className={`text-sm font-black italic mono mb-1 ${isPaidStage2 ? 'text-green-600 underline decoration-2' : 'text-slate-300'}`}>
-                                                                    {finalAmount.toLocaleString()} ₴
-                                                                </span>
-                                                                {isPaidStage2 ? (
-                                                                    <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
-                                                                        {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                        {canSeeStage2 && (
+                                                            <td className="p-1 px-2 text-center bg-emerald-50/20">
+                                                                <div className="flex flex-col items-center">
+                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                                                        Монтаж: {formatDate(order.date_installation)}
                                                                     </span>
-                                                                ) : order.date_installation ? (
-                                                                    (() => {
-                                                                        // Calculate fines applied to this stage
-                                                                        const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
-                                                                        const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+                                                                    <span className={`text-sm font-black italic mono mb-1 ${isPaidStage2 ? 'text-green-600 underline decoration-2' : 'text-slate-300'}`}>
+                                                                        {finalAmount.toLocaleString()} ₴
+                                                                    </span>
+                                                                    {isPaidStage2 ? (
+                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                            {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                                        </span>
+                                                                    ) : order.date_installation ? (
+                                                                        (() => {
+                                                                            // Calculate fines applied to this stage
+                                                                            const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
+                                                                            const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
 
-                                                                        // Fines go to advance first, then final
-                                                                        const fineToAdvance = Math.min(totalFines, order.advance_amount);
-                                                                        const fineToFinal = Math.max(0, Math.min(totalFines - fineToAdvance, stageAmount));
-                                                                        const realPayment = order.final_paid_amount;
+                                                                            // Fines go to advance first, then final
+                                                                            const fineToAdvance = Math.min(totalFines, order.advance_amount);
+                                                                            const fineToFinal = Math.max(0, Math.min(totalFines - fineToAdvance, stageAmount));
+                                                                            const realPayment = order.final_paid_amount;
 
-                                                                        return (
-                                                                            <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                                БОРГ
-                                                                                <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
-                                                                                    {realPayment > 0 && (
-                                                                                        <>
-                                                                                            <span className="text-slate-700">{realPayment.toLocaleString()}</span>
-                                                                                            {fineToFinal > 0 && <span className="text-slate-400">+</span>}
-                                                                                        </>
-                                                                                    )}
-                                                                                    {fineToFinal > 0 && (
-                                                                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                            {fineToFinal.toLocaleString()} ШТРАФ
+                                                                            return (
+                                                                                <div className="text-[10px] font-bold text-red-600 uppercase">
+                                                                                    БОРГ
+                                                                                    <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
+                                                                                        {realPayment > 0 && (
+                                                                                            <>
+                                                                                                <span className="text-slate-700">{realPayment.toLocaleString()}</span>
+                                                                                                {fineToFinal > 0 && <span className="text-slate-400">+</span>}
+                                                                                            </>
+                                                                                        )}
+                                                                                        {fineToFinal > 0 && (
+                                                                                            <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                                {fineToFinal.toLocaleString()} ШТРАФ
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {(realPayment > 0 || fineToFinal > 0) && (
+                                                                                            <span className="text-slate-400">/</span>
+                                                                                        )}
+                                                                                        <span className="text-slate-600">
+                                                                                            {(stageAmount - realPayment - fineToFinal).toLocaleString()} ₴
                                                                                         </span>
-                                                                                    )}
-                                                                                    {(realPayment > 0 || fineToFinal > 0) && (
-                                                                                        <span className="text-slate-400">/</span>
-                                                                                    )}
-                                                                                    <span className="text-slate-600">
-                                                                                        {(stageAmount - realPayment - fineToFinal).toLocaleString()} ₴
-                                                                                    </span>
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        );
-                                                                    })()
-                                                                ) : (
-                                                                    <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
-                                                                        ОЧІКУЄ
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </td>
+                                                                            );
+                                                                        })()
+                                                                    ) : (
+                                                                        <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
+                                                                            ОЧІКУЄ
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        )}
                                                     </>
                                                 );
                                             })()}
@@ -898,7 +907,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 </td>
                                             )}
 
-                                            {showFinancials && (
+                                            {canSeeDebt && (
                                                 <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
                                                     {(() => {
                                                         const unpaidFines = deductions

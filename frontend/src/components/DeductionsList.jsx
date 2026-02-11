@@ -79,38 +79,12 @@ const DeductionsList = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-black text-slate-800 uppercase italic">Мої провини / Штрафи</h2>
-                    <p className="text-sm text-slate-500 mt-1">Облік всіх відрахувань та штрафів</p>
-                </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
-                >
-                    <i className="fas fa-plus"></i> Додати штраф
-                </button>
+            <div>
+                <h2 className="text-2xl font-black text-slate-800 uppercase italic">Мої провини / Штрафи</h2>
+                <p className="text-sm text-slate-500 mt-1">Облік всіх відрахувань та штрафів</p>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-slate-400">Всього штрафів</p>
-                    <h3 className="text-3xl font-black text-slate-900">{deductions.length}</h3>
-                </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-slate-400">Загальна сума</p>
-                    <h3 className="text-3xl font-black text-red-600">
-                        {stats.total.toLocaleString()} <span className="text-lg font-normal text-red-300">₴</span>
-                    </h3>
-                </div>
-                <div className="bg-red-50 p-6 rounded-3xl shadow-sm border border-red-100">
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-red-400 italic">Непогашені</p>
-                    <h3 className="text-3xl font-black text-red-600">
-                        {stats.unpaid.toLocaleString()} <span className="text-lg font-normal text-red-300">₴</span>
-                    </h3>
-                </div>
-            </div>
+
 
             {/* Deductions Table */}
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
@@ -126,14 +100,12 @@ const DeductionsList = () => {
                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Замовлення</th>
                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Опис</th>
                                 <th className="px-6 py-3 text-right text-xs font-bold text-slate-600 uppercase tracking-wider">Сума</th>
-                                <th className="px-6 py-3 text-center text-xs font-bold text-slate-600 uppercase tracking-wider">Статус</th>
-                                <th className="px-6 py-3 text-center text-xs font-bold text-slate-600 uppercase tracking-wider">Дії</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {deductions.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-10 text-center text-slate-400">
+                                    <td colSpan="4" className="px-6 py-10 text-center text-slate-400">
                                         Штрафів поки немає 🎉
                                     </td>
                                 </tr>
@@ -154,26 +126,7 @@ const DeductionsList = () => {
                                                 {deduction.amount.toLocaleString()} ₴
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            {deduction.is_paid ? (
-                                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                                                    <i className="fas fa-check-circle"></i> Погашено
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
-                                                    <i className="fas fa-exclamation-circle"></i> Не погашено
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <button
-                                                onClick={() => handleDelete(deduction.id)}
-                                                className="text-red-600 hover:text-red-800 font-bold"
-                                                title="Видалити"
-                                            >
-                                                <i className="fas fa-trash"></i>
-                                            </button>
-                                        </td>
+
                                     </tr>
                                 ))
                             )}

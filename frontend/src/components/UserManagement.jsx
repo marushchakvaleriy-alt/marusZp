@@ -22,7 +22,13 @@ const UserManagement = ({ onBack }) => {
         salary_mode: 'sales_percent',
         salary_percent: 5.0,
         payment_stage1_percent: 50.0,
-        payment_stage2_percent: 50.0
+        payment_stage2_percent: 50.0,
+        // Manager permissions
+        can_see_constructor_pay: true,
+        can_see_stage1: true,
+        can_see_stage2: true,
+        can_see_debt: true,
+        can_see_dashboard: true
     });
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
@@ -56,7 +62,13 @@ const UserManagement = ({ onBack }) => {
             salary_mode: 'sales_percent',
             salary_percent: 5.0,
             payment_stage1_percent: 50.0,
-            payment_stage2_percent: 50.0
+            payment_stage2_percent: 50.0,
+            // Manager permissions
+            can_see_constructor_pay: true,
+            can_see_stage1: true,
+            can_see_stage2: true,
+            can_see_debt: true,
+            can_see_dashboard: true
         });
         setIsEditing(false);
         setEditId(null);
@@ -77,7 +89,13 @@ const UserManagement = ({ onBack }) => {
             salary_mode: u.salary_mode || 'sales_percent',
             salary_percent: u.salary_percent !== undefined ? u.salary_percent : 5.0,
             payment_stage1_percent: u.payment_stage1_percent !== undefined ? u.payment_stage1_percent : 50.0,
-            payment_stage2_percent: u.payment_stage2_percent !== undefined ? u.payment_stage2_percent : 50.0
+            payment_stage2_percent: u.payment_stage2_percent !== undefined ? u.payment_stage2_percent : 50.0,
+            // Manager permissions
+            can_see_constructor_pay: u.can_see_constructor_pay !== undefined ? u.can_see_constructor_pay : true,
+            can_see_stage1: u.can_see_stage1 !== undefined ? u.can_see_stage1 : true,
+            can_see_stage2: u.can_see_stage2 !== undefined ? u.can_see_stage2 : true,
+            can_see_debt: u.can_see_debt !== undefined ? u.can_see_debt : true,
+            can_see_dashboard: u.can_see_dashboard !== undefined ? u.can_see_dashboard : true
         });
         setEditId(u.id);
         setIsEditing(true);
@@ -339,6 +357,69 @@ const UserManagement = ({ onBack }) => {
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Manager Permissions Section */}
+                            {formData.role === 'manager' && (
+                                <div className="col-span-2 bg-gradient-to-br from-purple-50 to-pink-50 p-4 rounded-2xl border-2 border-purple-100">
+                                    <h3 className="text-sm font-black text-purple-700 uppercase mb-3 flex items-center gap-2">
+                                        <span>🔒</span> Права доступу менеджера
+                                    </h3>
+                                    <div className="space-y-2">
+                                        <label className="flex items-center gap-3 p-2 bg-white rounded-xl border border-purple-100 hover:border-purple-300 transition cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.can_see_constructor_pay}
+                                                onChange={(e) => setFormData({ ...formData, can_see_constructor_pay: e.target.checked })}
+                                                className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-bold text-slate-700">Бачити "Конструкторська робота"</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-3 p-2 bg-white rounded-xl border border-purple-100 hover:border-purple-300 transition cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.can_see_stage1}
+                                                onChange={(e) => setFormData({ ...formData, can_see_stage1: e.target.checked })}
+                                                className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-bold text-slate-700">Бачити "Етап I: Конструктив"</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-3 p-2 bg-white rounded-xl border border-purple-100 hover:border-purple-300 transition cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.can_see_stage2}
+                                                onChange={(e) => setFormData({ ...formData, can_see_stage2: e.target.checked })}
+                                                className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-bold text-slate-700">Бачити "Етап II: Монтаж"</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-3 p-2 bg-white rounded-xl border border-purple-100 hover:border-purple-300 transition cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.can_see_debt}
+                                                onChange={(e) => setFormData({ ...formData, can_see_debt: e.target.checked })}
+                                                className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-bold text-slate-700">Бачити "Борг/Залишок"</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-3 p-2 bg-white rounded-xl border border-purple-100 hover:border-purple-300 transition cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.can_see_dashboard}
+                                                onChange={(e) => setFormData({ ...formData, can_see_dashboard: e.target.checked })}
+                                                className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-bold text-slate-700">Бачити дашборди (верхні плашки)</span>
+                                        </label>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-2 italic">
+                                        💡 Ці налаштування дозволяють контролювати, які колонки та інформацію бачить цей менеджер
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="flex gap-2 pt-2">
                                 {isEditing && (

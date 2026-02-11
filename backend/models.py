@@ -19,6 +19,12 @@ class User(SQLModel, table=True):
     salary_percent: float = Field(default=5.0)  # Percentage value
     payment_stage1_percent: float = Field(default=50.0)  # % paid after stage 1 (Конструктив)
     payment_stage2_percent: float = Field(default=50.0)  # % paid after stage 2 (Монтаж)
+    # Manager permissions (only applicable for role='manager')
+    can_see_constructor_pay: bool = Field(default=True)  # Show "Конструкторська робота" column
+    can_see_stage1: bool = Field(default=True)  # Show "Етап I: Конструктив" column
+    can_see_stage2: bool = Field(default=True)  # Show "Етап II: Монтаж" column
+    can_see_debt: bool = Field(default=True)  # Show "Борг/Залишок" column
+    can_see_dashboard: bool = Field(default=True)  # Show top dashboards
 
 class UserCreate(BaseModel):
     username: str
@@ -33,6 +39,12 @@ class UserCreate(BaseModel):
     salary_percent: float = 5.0
     payment_stage1_percent: float = 50.0
     payment_stage2_percent: float = 50.0
+    # Manager permissions
+    can_see_constructor_pay: bool = True
+    can_see_stage1: bool = True
+    can_see_stage2: bool = True
+    can_see_debt: bool = True
+    can_see_dashboard: bool = True
 
 class UserRead(BaseModel):
     id: int
@@ -48,6 +60,12 @@ class UserRead(BaseModel):
     salary_percent: Optional[float] = None
     payment_stage1_percent: Optional[float] = None
     payment_stage2_percent: Optional[float] = None
+    # Manager permissions
+    can_see_constructor_pay: Optional[bool] = None
+    can_see_stage1: Optional[bool] = None
+    can_see_stage2: Optional[bool] = None
+    can_see_debt: Optional[bool] = None
+    can_see_dashboard: Optional[bool] = None
 
 class UserUpdate(BaseModel):
     password: Optional[str] = None
@@ -62,6 +80,12 @@ class UserUpdate(BaseModel):
     salary_percent: Optional[float] = None
     payment_stage1_percent: Optional[float] = None
     payment_stage2_percent: Optional[float] = None
+    # Manager permissions
+    can_see_constructor_pay: Optional[bool] = None
+    can_see_stage1: Optional[bool] = None
+    can_see_stage2: Optional[bool] = None
+    can_see_debt: Optional[bool] = None
+    can_see_dashboard: Optional[bool] = None
 
 class OrderBase(SQLModel):
     name: str = Field(index=True)

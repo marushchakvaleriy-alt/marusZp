@@ -185,6 +185,13 @@ def fix_database_schema(session: Session = Depends(get_session)):
             session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage1_percent FLOAT DEFAULT 50.0"))
             session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage2_percent FLOAT DEFAULT 50.0"))
             
+            # Manager permissions (v1.6)
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_constructor_pay BOOLEAN DEFAULT TRUE"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_stage1 BOOLEAN DEFAULT TRUE"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_stage2 BOOLEAN DEFAULT TRUE"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_debt BOOLEAN DEFAULT TRUE"))
+            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_dashboard BOOLEAN DEFAULT TRUE"))
+            
             session.commit()
             logs.append(f"SUCCESS with {variant}")
             break # Stop if one worked
