@@ -169,12 +169,14 @@ function App() {
                             >
                                 <i className="fas fa-exclamation-triangle"></i> {(user.role === 'admin' || user.role === 'manager') ? 'Провини конструкторів' : 'Мої провини'}
                             </button>
-                            <button
-                                onClick={() => navigateTo('payments')}
-                                className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
-                            >
-                                <i className="fas fa-history"></i> Історія платежів
-                            </button>
+                            {(user.role === 'admin' || user.role === 'constructor') && (
+                                <button
+                                    onClick={() => navigateTo('payments')}
+                                    className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
+                                >
+                                    <i className="fas fa-history"></i> Історія платежів
+                                </button>
+                            )}
                         </div>
                         <OrderList onSelectOrder={handleSelectOrder} onPaymentAdded={handleStatsRefresh} refreshTrigger={statsRefreshKey} />
                     </>
