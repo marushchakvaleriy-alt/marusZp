@@ -1,34 +1,32 @@
 # 🔗 Важливі посилання проекту
 
-## 🌐 Production (Render.com)
+## 🌐 Production (Fly.io)
 
 ### Frontend (сайт для користувачів)
 
-**URL:** `https://maruszp-frontend.onrender.com`
-*(Замініть на ваш реальний URL з Render Dashboard)*
+**URL:** `https://maruszp-frontend.fly.dev`
 
 ### Backend (API сервер)
 
-**URL:** `https://maruszp-backend.onrender.com`
-*(Замініть на ваш реальний URL з Render Dashboard)*
+**URL:** `https://maruszp-backend.fly.dev`
 
 ### 🔧 Важливі ендпоінти Backend
 
 | Endpoint | URL | Призначення |
 |----------|-----|-------------|
-| **Міграція БД** | `https://maruszp-backend.onrender.com/fix-db` | Додає нові поля до бази даних (запускати після оновлень моделей) |
-| **API Docs** | `https://maruszp-backend.onrender.com/docs` | Інтерактивна документація API |
-| **Health Check** | `https://maruszp-backend.onrender.com/` | Перевірка, чи працює сервер |
+| **Міграція БД** | `https://maruszp-backend.fly.dev/fix-db` | Додає нові поля до бази даних (запускати після оновлень моделей) |
+| **API Docs** | `https://maruszp-backend.fly.dev/docs` | Інтерактивна документація API |
+| **Health Check** | `https://maruszp-backend.fly.dev/` | Перевірка, чи працює сервер |
 
-## 📊 Render Dashboard
+## 📊 Fly Dashboard
 
-**URL:** `https://dashboard.render.com/`
+**URL:** `https://fly.io/dashboard/`
 
 Тут можна:
 
 - Переглядати логи серверів
-- Перезапускати сервіси
-- Змінювати змінні середовища
+- Перезапускати сервіси (machines)
+- Змінювати змінні середовища і секрети
 - Моніторити використання ресурсів
 
 ## 🔑 Доступи
@@ -40,8 +38,9 @@
 
 ### PostgreSQL Database
 
-- Знайти URL: Render Dashboard → PostgreSQL → Connections → Internal Database URL
-- Формат: `postgres://username:password@host:port/database`
+- База даних на Fly.io: `maruszp-db`
+- Знайти URL: У терміналі команда `fly secrets list -a maruszp-backend`
+- Внутрішній формат (між додатками Fly): `postgres://username:password@maruszp-db.flycast:5432/database`
 
 ## 📝 Важливі команди
 
@@ -60,35 +59,33 @@ npm run dev
 ### Після змін в моделях (додали нові поля)
 
 1. **Локально:** Відкрити `http://localhost:8000/fix-db`
-2. **На продакшні:** Відкрити `https://maruszp-backend.onrender.com/fix-db`
+2. **На продакшні:** Відкрити `https://maruszp-backend.fly.dev/fix-db`
 
-### Деплой (оновлення на Render)
+### Деплой (оновлення на Fly.io)
 
 ```bash
-git add .
-git commit -m "Опис змін"
-git push origin main
-```
+# Для бекенду:
+cd backend
+fly deploy -a maruszp-backend
 
-Render автоматично побачить зміни і оновить сервери (~2-5 хвилин).
+# Для фронтенду:
+cd frontend
+fly deploy -a maruszp-frontend
+```
 
 ## ⚠️ Troubleshooting
 
 ### Не можу увійти на продакшні
 
-1. Перевірте чи backend працює: `https://maruszp-backend.onrender.com/`
-2. Запустіть міграцію: `https://maruszp-backend.onrender.com/fix-db`
+1. Перевірте чи backend працює: `https://maruszp-backend.fly.dev/`
+2. Запустіть міграцію: `https://maruszp-backend.fly.dev/fix-db`
 3. Очистіть кеш браузера (Ctrl+Shift+Delete)
-
-### Backend "засинає"
-
-Безкоштовний план Render засинає після 15 хвилин неактивності.
-Перший запит після "пробудження" займає ~30-50 секунд. Це нормально.
 
 ### Помилка при деплої
 
-- Перегляньте логи на Render Dashboard
-- Перевірте чи всі Environment Variables встановлені правильно
+- Перегляньте логи в терміналі після помилки.
+- Перевірте логи в Fly Dashboard.
+- Перевірте чи всі Secrets/Environment Variables встановлені правильно (через CLI `fly secrets list`).
 
 ## 📅 Останні оновлення
 

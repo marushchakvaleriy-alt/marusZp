@@ -4,6 +4,7 @@ from models import User, Order
 from auth import get_password_hash
 from sqlalchemy import text
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -291,8 +292,153 @@ def migrate():
                         logger.error(f"Failed to add 'date_installation_plan' (unquoted): {e2}")
                         session.rollback()
 
+            # Check for constructive_days (Gantt planning pipeline)
+            try:
+                session.exec(text("SELECT constructive_days FROM \"order\" LIMIT 1"))
+                logger.info("Column 'constructive_days' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'constructive_days' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN constructive_days INTEGER DEFAULT 5"))
+                    session.commit()
+                    logger.info("Added 'constructive_days' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'constructive_days': {e}")
+                    session.rollback()
+                    try:
+                        session.connection().execute(text("ALTER TABLE order ADD COLUMN constructive_days INTEGER DEFAULT 5"))
+                        session.commit()
+                        logger.info("Added 'constructive_days' column (unquoted).")
+                    except Exception as e2:
+                        logger.error(f"Failed to add 'constructive_days' (unquoted): {e2}")
+                        session.rollback()
+
+            # Check for complectation_days (Gantt planning pipeline)
+            try:
+                session.exec(text("SELECT complectation_days FROM \"order\" LIMIT 1"))
+                logger.info("Column 'complectation_days' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'complectation_days' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN complectation_days INTEGER DEFAULT 2"))
+                    session.commit()
+                    logger.info("Added 'complectation_days' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'complectation_days': {e}")
+                    session.rollback()
+                    try:
+                        session.connection().execute(text("ALTER TABLE order ADD COLUMN complectation_days INTEGER DEFAULT 2"))
+                        session.commit()
+                        logger.info("Added 'complectation_days' column (unquoted).")
+                    except Exception as e2:
+                        logger.error(f"Failed to add 'complectation_days' (unquoted): {e2}")
+                        session.rollback()
+
+            # Check for preassembly_days (Gantt planning pipeline)
+            try:
+                session.exec(text("SELECT preassembly_days FROM \"order\" LIMIT 1"))
+                logger.info("Column 'preassembly_days' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'preassembly_days' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN preassembly_days INTEGER DEFAULT 1"))
+                    session.commit()
+                    logger.info("Added 'preassembly_days' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'preassembly_days': {e}")
+                    session.rollback()
+                    try:
+                        session.connection().execute(text("ALTER TABLE order ADD COLUMN preassembly_days INTEGER DEFAULT 1"))
+                        session.commit()
+                        logger.info("Added 'preassembly_days' column (unquoted).")
+                    except Exception as e2:
+                        logger.error(f"Failed to add 'preassembly_days' (unquoted): {e2}")
+                        session.rollback()
+
+            # Check for installation_days (planned montage duration)
+            try:
+                session.exec(text("SELECT installation_days FROM \"order\" LIMIT 1"))
+                logger.info("Column 'installation_days' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'installation_days' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN installation_days INTEGER DEFAULT 3"))
+                    session.commit()
+                    logger.info("Added 'installation_days' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'installation_days': {e}")
+                    session.rollback()
+                    try:
+                        session.connection().execute(text("ALTER TABLE order ADD COLUMN installation_days INTEGER DEFAULT 3"))
+                        session.commit()
+                        logger.info("Added 'installation_days' column (unquoted).")
+                    except Exception as e2:
+                        logger.error(f"Failed to add 'installation_days' (unquoted): {e2}")
+                        session.rollback()
+            
+            # Check for manager_id
+            try:
+                session.exec(text("SELECT manager_id FROM \"order\" LIMIT 1"))
+            except Exception:
+                session.rollback()
+                logger.info("Adding manager_id...")
+                session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN manager_id INTEGER"))
+                session.commit()
+
+            # Check for manager_paid_amount
+            try:
+                session.exec(text("SELECT manager_paid_amount FROM \"order\" LIMIT 1"))
+            except Exception:
+                session.rollback()
+                logger.info("Adding manager_paid_amount...")
+                session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN manager_paid_amount FLOAT DEFAULT 0.0"))
+                session.commit()
+
+            # Check for date_manager_paid
+            try:
+                session.exec(text("SELECT date_manager_paid FROM \"order\" LIMIT 1"))
+            except Exception:
+                session.rollback()
+                logger.info("Adding date_manager_paid...")
+                session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN date_manager_paid DATE"))
+                session.commit()
+
         except Exception as outer_e:
             logger.error(f"Error checking order columns: {outer_e}")
+            session.rollback()
+
+    # 4c. Add Payment Columns (legacy DB compatibility)
+    with Session(engine) as session:
+        try:
+            payment_columns = [
+                ("allocated_automatically", "ALTER TABLE payment ADD COLUMN allocated_automatically BOOLEAN DEFAULT TRUE"),
+                ("notes", "ALTER TABLE payment ADD COLUMN notes TEXT"),
+                ("manual_order_id", "ALTER TABLE payment ADD COLUMN manual_order_id INTEGER"),
+                ("constructor_id", "ALTER TABLE payment ADD COLUMN constructor_id INTEGER"),
+                ("manager_id", "ALTER TABLE payment ADD COLUMN manager_id INTEGER"),
+            ]
+
+            for column_name, alter_sql in payment_columns:
+                try:
+                    session.exec(text(f"SELECT {column_name} FROM payment LIMIT 1"))
+                    logger.info(f"Column '{column_name}' already exists in 'payment' table.")
+                except Exception:
+                    session.rollback()
+                    logger.info(f"Column '{column_name}' not found in 'payment'. Adding it...")
+                    try:
+                        session.connection().execute(text(alter_sql))
+                        session.commit()
+                        logger.info(f"Added '{column_name}' to 'payment' table.")
+                    except Exception as e:
+                        logger.error(f"Failed to add '{column_name}' to 'payment': {e}")
+                        session.rollback()
+
+        except Exception as outer_e:
+            logger.error(f"Error checking payment columns: {outer_e}")
             session.rollback()
 
     # 5. Seed Default Admin
@@ -301,22 +447,26 @@ def migrate():
             # This might fail if columns are still missing and mapping is strict
             user = session.exec(select(User).where(User.username == "admin")).first()
             if not user:
-                logger.info("Creating default admin user...")
+                default_admin_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", "admin")
+                logger.info("Creating default super-admin user...")
                 admin_user = User(
                     username="admin",
-                    password_hash=get_password_hash("admin"),
-                    full_name="Administrator",
-                    role="admin"
+                    password_hash=get_password_hash(default_admin_password),
+                    full_name="Super Administrator",
+                    role="super_admin"
                 )
                 session.add(admin_user)
                 session.commit()
-                logger.info("Default admin created: admin / admin")
+                logger.info("Default super-admin created successfully.")
             else:
-                logger.info("Admin user already exists. Updating password to ensure compatibility...")
-                user.password_hash = get_password_hash("admin")
-                session.add(user)
-                session.commit()
-                logger.info("Admin password reset to: admin")
+                if user.role != "super_admin":
+                    logger.info("Promoting existing 'admin' user to super_admin...")
+                    user.role = "super_admin"
+                    session.add(user)
+                    session.commit()
+                    logger.info("User 'admin' promoted to super_admin.")
+                else:
+                    logger.info("Super-admin user already exists. Password was not changed.")
         except Exception as e:
             logger.error(f"Failed to seed admin user (possibly schema mismatch): {e}")
             session.rollback()

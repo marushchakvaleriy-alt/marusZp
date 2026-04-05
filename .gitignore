@@ -16,7 +16,13 @@ dist/
 
 # Logs
 *.log
+test_logs.txt
 
 # Editor
 .vscode/
 .idea/
+
+# Sensitive local files
+remote_env.txt
+FLY_CREDENTIALS.txt
+backup_*.json

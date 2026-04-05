@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+
 export const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+    baseURL: API_BASE_URL,
 });
 
 export const resetDatabase = async (password) => {
@@ -21,6 +23,11 @@ export const getUsers = async () => {
 
 export const getOrder = async (id) => {
     const response = await api.get(`/orders/${id}`);
+    return response.data;
+};
+
+export const getOrderCalculationHistory = async (id) => {
+    const response = await api.get(`/orders/${id}/calculation-history`);
     return response.data;
 };
 

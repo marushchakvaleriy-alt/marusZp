@@ -3,6 +3,7 @@ import { getOrders, createOrder, getDeductions, updateOrder, getUsers, api } fro
 import PaymentModal from './PaymentModal';
 import SettingsModal from './SettingsModal';
 import CalendarView from './CalendarView';
+import GanttView from './GanttView';
 import { useAuth } from '../context/AuthContext';
 import UKDatePicker from './UKDatePicker';
 
@@ -13,23 +14,30 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
         price: '',
         date_received: new Date().toISOString().split('T')[0], // Default to today
         date_design_deadline: '', // New field
+        constructive_days: 5,
+        complectation_days: 2,
+        preassembly_days: 1,
+        installation_days: 3,
         material_cost: '',
         fixed_bonus: '',  // Manager can set exact amount
         product_types: [],
-        constructor_id: ''
+        constructor_id: '',
+        manager_id: ''
     });
     const [customType, setCustomType] = useState('');
     const [constructors, setConstructors] = useState([]);
+    const [managers, setManagers] = useState([]);
 
     const { user } = useAuth();
-    const isAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
     const isManager = user?.role === 'manager';
     const canManage = isAdmin || isManager;
 
     useEffect(() => {
         if (isOpen && canManage) {
             getUsers().then(users => {
-                setConstructors(users);
+                setConstructors(users.filter(u => u.role === 'constructor' || u.role === 'admin' || u.role === 'super_admin'));
+                setManagers(users.filter(u => u.role === 'manager' || u.role === 'admin' || u.role === 'super_admin'));
             }).catch(console.error);
         }
     }, [isOpen, canManage]);
@@ -76,17 +84,29 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
             fixed_bonus: formData.fixed_bonus ? parseFloat(formData.fixed_bonus) : null,
             date_received: formData.date_received || new Date().toISOString().split('T')[0],
             date_design_deadline: formData.date_design_deadline || null,
+            constructive_days: Math.max(1, parseInt(formData.constructive_days) || 5),
+            complectation_days: Math.max(1, parseInt(formData.complectation_days) || 2),
+            preassembly_days: Math.max(1, parseInt(formData.preassembly_days) || 1),
+            installation_days: Math.max(1, parseInt(formData.installation_days) || 3),
             product_types: JSON.stringify(formData.product_types),
             date_to_work: null,
-            constructor_id: formData.constructor_id ? parseInt(formData.constructor_id) : null
+            constructor_id: formData.constructor_id ? parseInt(formData.constructor_id) : null,
+            manager_id: formData.manager_id ? parseInt(formData.manager_id) : null
         });
         setFormData({
             name: '',
             price: '',
             date_received: new Date().toISOString().split('T')[0],
             date_design_deadline: '',
+            constructive_days: 5,
+            complectation_days: 2,
+            preassembly_days: 1,
+            installation_days: 3,
             product_types: [],
-            constructor_id: ''
+            constructor_id: '',
+            manager_id: '',
+            material_cost: '',
+            fixed_bonus: ''
         });
         setCustomType('');
     };
@@ -176,6 +196,16 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
                         />
                     </div>
                     <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 text-green-600">Вартість матеріалів (для розрахунку ЗП)</label>
+                        <input
+                            type="number"
+                            className="w-full p-3 bg-green-50/50 border border-green-200 rounded-xl font-bold text-green-700 focus:outline-none focus:border-green-500"
+                            value={formData.material_cost}
+                            placeholder="0"
+                            onChange={e => setFormData({ ...formData, material_cost: e.target.value })}
+                        />
+                    </div>
+                    <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Дата дедлайну (Конструктив)</label>
                         <UKDatePicker
                             selected={formData.date_design_deadline}
@@ -184,21 +214,87 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
                         />
                     </div>
 
+                    {canManage && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Днів: Конструктив</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    className="w-full p-3 bg-slate-50 border border-blue-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                                    value={formData.constructive_days}
+                                    onChange={e => setFormData({ ...formData, constructive_days: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Днів: Комплектація</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    className="w-full p-3 bg-slate-50 border border-amber-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-amber-500"
+                                    value={formData.complectation_days}
+                                    onChange={e => setFormData({ ...formData, complectation_days: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Днів: Предзбірка</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    className="w-full p-3 bg-slate-50 border border-violet-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-violet-500"
+                                    value={formData.preassembly_days}
+                                    onChange={e => setFormData({ ...formData, preassembly_days: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Днів: Монтаж</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    className="w-full p-3 bg-slate-50 border border-emerald-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-emerald-500"
+                                    value={formData.installation_days}
+                                    onChange={e => setFormData({ ...formData, installation_days: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     {isAdmin && (
-                        <div className="mb-4">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити конструктора</label>
-                            <select
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                                value={formData.constructor_id}
-                                onChange={e => setFormData({ ...formData, constructor_id: e.target.value })}
-                            >
-                                <option value="">-- Не призначено --</option>
-                                {constructors.map(u => (
-                                    <option key={u.id} value={u.id}>
-                                        {u.full_name || u.username} ({u.role === 'admin' ? 'Адмін' : 'Конструктор'})
-                                    </option>
-                                ))}
-                            </select>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити конструктора</label>
+                                <select
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                                    value={formData.constructor_id}
+                                    onChange={e => setFormData({ ...formData, constructor_id: e.target.value })}
+                                >
+                                    <option value="">-- Не призначено --</option>
+                                    {constructors.map(u => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.full_name || u.username} ({u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : 'Конструктор'})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити менеджера</label>
+                                <select
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                                    value={formData.manager_id}
+                                    onChange={e => setFormData({ ...formData, manager_id: e.target.value })}
+                                >
+                                    <option value="">-- Не призначено --</option>
+                                    {managers.map(u => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.full_name || u.username} ({u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : 'Менеджер'})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     )}
 
@@ -239,14 +335,16 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [viewMode, setViewMode] = useState('active'); // 'active' or 'archived'
-    const [isCalendarMode, setIsCalendarMode] = useState(false);
+    const [viewLayout, setViewLayout] = useState('list'); // 'list' | 'calendar' | 'gantt'
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('id');
     const [sortOrder, setSortOrder] = useState('desc');
+    const [activeTab, setActiveTab] = useState('constructors'); // 'constructors' or 'managers'
     const [filterConstructorId, setFilterConstructorId] = useState('');
     const [constructors, setConstructors] = useState([]);
+    const [managers, setManagers] = useState([]);
     const { user } = useAuth();
-    const isAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
     const isManager = user?.role === 'manager';
     // Managers can manage orders (create, edit, assign) but might have fewer financial rights or deletion rights
     // Managers can manage orders, but double check role isn't constructor or undefined
@@ -277,9 +375,9 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     useEffect(() => {
         if (canManage) {
             getUsers().then(users => {
-                // Filter only constructors
-                const constructorUsers = users.filter(u => u.role === 'constructor');
-                setConstructors(constructorUsers);
+                // Filter constructors and managers
+                setConstructors(users.filter(u => u.role === 'constructor' || u.role === 'admin' || u.role === 'super_admin'));
+                setManagers(users.filter(u => u.role === 'manager' || u.role === 'admin' || u.role === 'super_admin'));
             }).catch(console.error);
         }
     }, [canManage]);
@@ -343,19 +441,20 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
         }
     };
 
+    const handleGanttUpdate = async (orderId, patch) => {
+        try {
+            await updateOrder(orderId, patch);
+            fetchOrders();
+        } catch (error) {
+            console.error("Failed to update order plan:", error);
+            alert("Помилка оновлення плану в Gantt");
+        }
+    };
+
     // Filter orders by completion status and search query
     const filteredOrders = orders.filter(order => {
-        // Determine if order is completed (archived)
-        // Determine if order is completed (archived)
-        // CRITICAL: Order is completed if explicitly paid OR if installation is done and debt is covered by fines
-        const orderFines = deductions
-            .filter(d => d.order_id === order.id)
-            .reduce((sum, d) => sum + d.amount, 0);
+        const isCompleted = !!order.date_final_paid || (!!order.date_installation && order.remainder_amount <= 0.01);
 
-        const adjustedDebt = (order.is_critical_debt ? order.current_debt : order.remainder_amount) - orderFines;
-        const isEffectivelyPaid = adjustedDebt <= 0.01;
-
-        const isCompleted = !!order.date_final_paid || (!!order.date_installation && isEffectivelyPaid);
 
         // Filter by view mode
         const matchesViewMode = viewMode === 'active' ? !isCompleted : isCompleted;
@@ -376,6 +475,23 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
         <div id="list-page">
             <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
                 <h1 className="text-2xl font-black text-slate-800 italic uppercase">Реєстр замовлень</h1>
+                
+                {/* Tab Switcher */}
+                <div className="flex gap-1 bg-slate-100 p-1 rounded-2xl mb-1 w-fit">
+                    <button
+                        onClick={() => setActiveTab('constructors')}
+                        className={`px-6 py-2 rounded-xl font-bold text-sm transition ${activeTab === 'constructors' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <i className="fas fa-drafting-compass mr-2"></i> Конструктори
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('managers')}
+                        className={`px-6 py-2 rounded-xl font-bold text-sm transition ${activeTab === 'managers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <i className="fas fa-user-tie mr-2"></i> Менеджери
+                    </button>
+                </div>
+
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-4">
                     {isAdmin && (
                         <>
@@ -451,11 +567,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     </button>
                 </div>
 
-                {/* Calendar Toggle */}
+                {/* Layout Toggle */}
                 <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
                     <button
-                        onClick={() => setIsCalendarMode(false)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${!isCalendarMode
+                        onClick={() => setViewLayout('list')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${viewLayout === 'list'
                             ? 'bg-white text-blue-600 shadow-sm'
                             : 'text-slate-400 hover:text-slate-600'
                             }`}
@@ -463,13 +579,22 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         <span>📋</span> Список
                     </button>
                     <button
-                        onClick={() => setIsCalendarMode(true)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${isCalendarMode
+                        onClick={() => setViewLayout('calendar')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${viewLayout === 'calendar'
                             ? 'bg-white text-blue-600 shadow-sm'
                             : 'text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         <span>📅</span> Календар
+                    </button>
+                    <button
+                        onClick={() => setViewLayout('gantt')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${viewLayout === 'gantt'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                    >
+                        <span>📊</span> Gantt
                     </button>
                 </div>
 
@@ -490,8 +615,6 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     </div>
                 )}
 
-                {/* Sorting Dropdown Removed */}
-
                 {/* Search Input */}
                 <div className="flex-1">
                     <input
@@ -504,7 +627,13 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                 </div>
             </div>
 
-            <CreateOrderModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleCreate} />
+            <CreateOrderModal 
+                isOpen={isModalOpen} 
+                onClose={() => setIsModalOpen(false)} 
+                onSave={handleCreate} 
+                constructors={constructors}
+                managers={managers}
+            />
             <PaymentModal
                 isOpen={isPaymentModalOpen}
                 onClose={() => setIsPaymentModalOpen(false)}
@@ -515,8 +644,15 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             />
             {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
 
-            {isCalendarMode ? (
+            {viewLayout === 'calendar' ? (
                 <CalendarView orders={filteredOrders} onSelectOrder={onSelectOrder} />
+            ) : viewLayout === 'gantt' ? (
+                <GanttView
+                    orders={filteredOrders}
+                    onSelectOrder={onSelectOrder}
+                    canManage={canManage}
+                    onPlanUpdate={handleGanttUpdate}
+                />
             ) : (
                 <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden border border-white/20">
                     {/* Desktop Table View */}
@@ -564,10 +700,22 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                 <th className="p-1 px-2 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
                                 <th className="p-1 px-2 border-b text-center font-bold text-red-500">Дедлайн</th>
                                 {(canManage) && <th className="p-1 px-2 border-b text-center font-bold text-purple-500">План. монтаж</th>}
-                                {showFinancials && <th className="p-1 px-2 border-b text-right font-bold">Вартість</th>}
-                                {canSeeConstructorPay && <th className="p-1 px-2 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
-                                {canSeeStage1 && <th className="p-1 px-2 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>}
-                                {canSeeStage2 && <th className="p-1 px-2 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>}
+                                
+                                {activeTab === 'constructors' ? (
+                                    <>
+                                        {showFinancials && <th className="p-1 px-2 border-b text-right font-bold">Вартість</th>}
+                                        {canSeeConstructorPay && <th className="p-1 px-2 border-b text-right font-bold text-blue-500">Конструкторська робота</th>}
+                                        {canSeeStage1 && <th className="p-1 px-2 border-b text-center font-bold text-slate-500 bg-slate-100/10">Етап I: Конструктив</th>}
+                                        {canSeeStage2 && <th className="p-1 px-2 border-b text-center font-bold text-emerald-600/70 bg-emerald-50/10">Етап II: Монтаж</th>}
+                                    </>
+                                ) : (
+                                    <>
+                                        {showFinancials && <th className="p-1 px-2 border-b text-right font-bold text-amber-600">Вартість проекту</th>}
+                                        <th className="p-1 px-2 border-b text-right font-bold text-blue-600">Менеджерська премія</th>
+                                        <th className="p-1 px-2 border-b text-center font-bold text-emerald-600 bg-emerald-50/10">Виплата менеджеру</th>
+                                    </>
+                                )}
+                                
                                 {showFinancials && <th className="p-1 px-2 border-b text-center font-bold text-orange-600 bg-orange-50/10">Штрафи</th>}
                                 {canSeeDebt && <th className="p-1 px-2 border-b text-right font-bold">Борг/Залишок</th>}
                             </tr>
@@ -582,7 +730,6 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                             ) : (
                                 filteredOrders.map((order) => {
                                     const bonus = order.bonus;
-                                    // USE BACKEND VALUES, fall back to calculation only if missing
                                     const advanceAmount = showFinancials ? (order.advance_amount ?? (bonus * 0.5)) : 0;
                                     const finalAmount = showFinancials ? (order.final_amount ?? (bonus * 0.5)) : 0;
                                     const stageAmount = bonus * 0.5;
@@ -607,35 +754,66 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
                                             <td className="p-1 px-2">
                                                 <div className="font-black text-slate-800 italic text-base">{order.name}</div>
-                                                {/* Constructor Name Display / Edit */}
                                                 <div onClick={(e) => e.stopPropagation()} className="mt-1">
-                                                    {canManage ? (
-                                                        <select
-                                                            className="w-full text-xs font-bold text-blue-600 bg-blue-50/30 border-0 rounded-lg p-1 outline-none focus:ring-1 focus:ring-blue-300 cursor-pointer"
-                                                            value={order.constructor_id || ""}
-                                                            onChange={async (e) => {
-                                                                const val = e.target.value ? parseInt(e.target.value) : null;
-                                                                try {
-                                                                    await updateOrder(order.id, { constructor_id: val });
-                                                                    fetchOrders();
-                                                                } catch (err) {
-                                                                    alert("Помилка призначення конструктора");
-                                                                }
-                                                            }}
-                                                        >
-                                                            <option value="">-- Не призначено --</option>
-                                                            {constructors.map(c => (
-                                                                <option key={c.id} value={c.id}>
-                                                                    {c.full_name || c.username}
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                    {activeTab === 'constructors' ? (
+                                                        canManage ? (
+                                                            <select
+                                                                className="w-full text-xs font-bold text-blue-600 bg-blue-50/30 border-0 rounded-lg p-1 outline-none focus:ring-1 focus:ring-blue-300 cursor-pointer"
+                                                                value={order.constructor_id || ""}
+                                                                onChange={async (e) => {
+                                                                    const val = e.target.value ? parseInt(e.target.value) : null;
+                                                                    try {
+                                                                        await updateOrder(order.id, { constructor_id: val });
+                                                                        fetchOrders();
+                                                                    } catch (err) {
+                                                                        alert("Помилка призначення конструктора");
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <option value="">-- Конструктор --</option>
+                                                                {constructors.map(c => (
+                                                                    <option key={c.id} value={c.id}>
+                                                                        {c.full_name || c.username}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            order.constructor_id && (
+                                                                <div className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                                                                    <span>👨‍🔧</span>
+                                                                    {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
+                                                                </div>
+                                                            )
+                                                        )
                                                     ) : (
-                                                        order.constructor_id && (
-                                                            <div className="text-xs font-bold text-blue-600 flex items-center gap-1">
-                                                                <span>👨‍🔧</span>
-                                                                {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Невідомий'}
-                                                            </div>
+                                                        canManage ? (
+                                                            <select
+                                                                className="w-full text-xs font-bold text-indigo-600 bg-indigo-50/30 border-0 rounded-lg p-1 outline-none focus:ring-1 focus:ring-indigo-300 cursor-pointer"
+                                                                value={order.manager_id || ""}
+                                                                onChange={async (e) => {
+                                                                    const val = e.target.value ? parseInt(e.target.value) : null;
+                                                                    try {
+                                                                        await updateOrder(order.id, { manager_id: val });
+                                                                        fetchOrders();
+                                                                    } catch (err) {
+                                                                        alert("Помилка призначення менеджера");
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <option value="">-- Менеджер --</option>
+                                                                {managers.map(m => (
+                                                                    <option key={m.id} value={m.id}>
+                                                                        {m.full_name || m.username}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            order.manager_id && (
+                                                                <div className="text-xs font-bold text-indigo-600 flex items-center gap-1">
+                                                                    <span>👤</span>
+                                                                    {managers.find(m => m.id === order.manager_id)?.full_name || 'Невідомий'}
+                                                                </div>
+                                                            )
                                                         )
                                                     )}
                                                 </div>
@@ -666,7 +844,6 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                             </td>
 
                                             <td className="p-4 text-center">
-                                                {/* Design Deadline Input (Admin Only) */}
                                                 {isAdmin && !isPaidStage1 && (
                                                     <div className="flex justify-center" onClick={e => e.stopPropagation()}>
                                                         <UKDatePicker
@@ -676,7 +853,6 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                                     await updateOrder(order.id, { date_design_deadline: date || null });
                                                                     fetchOrders();
                                                                 } catch (err) {
-                                                                    console.error("Failed to update deadline", err);
                                                                     alert("Помилка оновлення дедлайну");
                                                                 }
                                                             }}
@@ -700,237 +876,170 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                         );
                                                     })()
                                                 )}
-                                                {!order.date_design_deadline && !isAdmin && (
-                                                    <span className="text-slate-300 text-xs">—</span>
-                                                )}
                                             </td>
 
-                                            {/* Planned Installation (Manager/Admin Only) - SEPARATE COLUMN */}
                                             {(canManage) && (
                                                 <td className="p-1 px-2 text-center">
-                                                    <div className="flex justify-center" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex flex-col items-center gap-1" onClick={e => e.stopPropagation()}>
                                                         <UKDatePicker
                                                             selected={order.date_installation_plan}
                                                             onChange={async (date) => {
-                                                                console.log('Planned installation date changed:', date);
                                                                 try {
                                                                     await updateOrder(order.id, { date_installation_plan: date || null });
-                                                                    console.log('Update successful, refreshing orders...');
                                                                     await fetchOrders();
                                                                 } catch (err) {
-                                                                    console.error('Failed to update planned installation date:', err);
                                                                     alert(`Помилка оновлення дати монтажу: ${err.message || err}`);
                                                                 }
                                                             }}
                                                             className="w-28 text-[12px] font-bold p-1 bg-white border border-slate-200 rounded shadow-sm text-purple-600 focus:border-purple-500"
                                                         />
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            max="60"
+                                                            defaultValue={order.installation_days || 3}
+                                                            className="w-16 text-[11px] font-bold p-1 bg-white border border-emerald-200 rounded shadow-sm text-emerald-700 text-center focus:border-emerald-500"
+                                                            title="Кількість днів монтажу"
+                                                            onBlur={async (e) => {
+                                                                const parsed = Math.max(1, Math.min(60, parseInt(e.target.value || '3', 10)));
+                                                                e.target.value = String(parsed);
+                                                                if (parsed !== (order.installation_days || 3)) {
+                                                                    try {
+                                                                        await updateOrder(order.id, { installation_days: parsed });
+                                                                        await fetchOrders();
+                                                                    } catch (err) {
+                                                                        alert(`Помилка оновлення тривалості монтажу: ${err.message || err}`);
+                                                                    }
+                                                                }
+                                                            }}
+                                                        />
                                                     </div>
                                                 </td>
                                             )}
 
-                                            {showFinancials && (
-                                                <td className="p-1 px-2 text-right font-bold text-slate-600 italic mono">
-                                                    {order.price.toLocaleString()}
-                                                </td>
-                                            )}
-
-                                            {canSeeConstructorPay && (
-                                                <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
-                                                    {bonus.toLocaleString()}
-                                                </td>
+                                            {activeTab === 'constructors' ? (
+                                                <>
+                                                    {showFinancials && (
+                                                        <td className="p-1 px-2 text-right font-bold text-slate-600 italic mono">
+                                                            {order.price.toLocaleString()}
+                                                        </td>
+                                                    )}
+                                                    {canSeeConstructorPay && (
+                                                        <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
+                                                            {bonus.toLocaleString()}
+                                                        </td>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {showFinancials && (
+                                                        <td className="p-1 px-2 text-right font-bold text-amber-600 italic mono">
+                                                            {order.price.toLocaleString()} ₴
+                                                        </td>
+                                                    )}
+                                                    <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
+                                                        {(order.manager_bonus || 0).toLocaleString()} ₴
+                                                    </td>
+                                                </>
                                             )}
 
                                             {(() => {
-                                                // Calculate unpaid fines for this order
                                                 const unpaidFines = deductions
-                                                    .filter(d => d.order_id === order.id)
+                                                    .filter(d => d.order_id === order.id && !d.is_paid)
                                                     .reduce((sum, d) => sum + d.amount, 0);
 
-                                                // Calculate adjusted debt
-                                                const adjustedDebt = (order.is_critical_debt ? order.current_debt : order.remainder_amount) - unpaidFines;
-
-                                                // Determine if stages are effectively paid (debt covered by fines)
-                                                const isEffectivelyPaid = adjustedDebt <= 0.01;
-
-                                                // Stage 1 status
-                                                const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && isEffectivelyPaid && order.advance_remaining <= 0.01);
-
-                                                // Stage 2 status
-                                                const isPaidStage2 = !!order.date_final_paid || (order.date_installation && isEffectivelyPaid);
+                                                const adjustedDebt = order.is_critical_debt ? order.current_debt : order.remainder_amount;
+                                                const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && order.advance_remaining <= 0.01);
+                                                const isPaidStage2 = !!order.date_final_paid || (order.date_installation && order.final_remaining <= 0.01);
 
                                                 return (
                                                     <>
-                                                        {/* Stage 1 */}
-                                                        {canSeeStage1 && (
-                                                            <td className="p-1 px-2 text-center bg-slate-50/20">
+                                                        {activeTab === 'constructors' ? (
+                                                            <>
+                                                                {canSeeStage1 && (
+                                                                    <td className="p-1 px-2 text-center bg-slate-50/20">
+                                                                        <div className="flex flex-col items-center">
+                                                                            <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                                                                Здано: {formatDate(order.date_to_work)}
+                                                                            </span>
+                                                                            {order.advance_paid_amount > 0 && order.advance_paid_amount < order.advance_amount && !isPaidStage1 ? (
+                                                                                <span className="text-sm font-black italic mono mb-1 text-yellow-600">
+                                                                                    {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className={`text-sm font-black italic mono mb-1 ${isPaidStage1 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
+                                                                                    {advanceAmount.toLocaleString()} ₴
+                                                                                </span>
+                                                                            )}
+                                                                            {isPaidStage1 ? (
+                                                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                                    {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                                                </span>
+                                                                            ) : order.date_to_work ? (
+                                                                                <div className="text-[10px] font-bold text-red-600 uppercase">БОРГ</div>
+                                                                            ) : (
+                                                                                <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">ОЧІКУЄ</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                )}
+
+                                                                {canSeeStage2 && (
+                                                                    <td className="p-1 px-2 text-center bg-emerald-50/20">
+                                                                        <div className="flex flex-col items-center">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Монтаж: {formatDate(order.date_installation)}</span>
+                                                                            <span className={`text-sm font-black italic mono mb-1 ${isPaidStage2 ? 'text-green-600 underline decoration-2' : 'text-slate-300'}`}>
+                                                                                {finalAmount.toLocaleString()} ₴
+                                                                            </span>
+                                                                            {isPaidStage2 ? (
+                                                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                                    {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
+                                                                                </span>
+                                                                            ) : order.date_installation ? (
+                                                                                <div className="text-[10px] font-bold text-red-600 uppercase">БОРГ</div>
+                                                                            ) : (
+                                                                                <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">ОЧІКУЄ</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <td className="p-1 px-2 text-center bg-emerald-50/10">
                                                                 <div className="flex flex-col items-center">
-                                                                    <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">
-                                                                        Здано: {formatDate(order.date_to_work)}
+                                                                    <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">Статус виплат менеджера</span>
+                                                                    <span className={`text-sm font-black italic mono mb-1 ${order.date_manager_paid ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
+                                                                        {(order.manager_paid_amount || 0).toLocaleString()} / {(order.manager_bonus || 0).toLocaleString()} ₴
                                                                     </span>
-                                                                    {order.advance_paid_amount > 0 && order.advance_paid_amount < order.advance_amount && !isPaidStage1 ? (
-                                                                        <span className="text-sm font-black italic mono mb-1 text-yellow-600">
-                                                                            {order.advance_paid_amount.toLocaleString()} / {order.advance_amount.toLocaleString()} ₴
-                                                                        </span>
+                                                                    {order.date_manager_paid ? (
+                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">Виплачено {formatDate(order.date_manager_paid)}</span>
+                                                                    ) : (order.manager_paid_amount || 0) > 0 ? (
+                                                                        <span className="text-[9px] font-bold text-orange-400 uppercase">Частково</span>
                                                                     ) : (
-                                                                        <span className={`text-sm font-black italic mono mb-1 ${isPaidStage1 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
-                                                                            {advanceAmount.toLocaleString()} ₴
-                                                                        </span>
-                                                                    )}
-                                                                    {isPaidStage1 ? (
-                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
-                                                                            {order.date_advance_paid ? `Оплата: ${formatDate(order.date_advance_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
-                                                                        </span>
-                                                                    ) : order.date_to_work ? (
-                                                                        (() => {
-                                                                            // Calculate fines applied to this stage
-                                                                            const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
-                                                                            const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
-
-                                                                            // Assume fines go to advance stage first (same logic as payment distribution)
-                                                                            const fineToAdvance = Math.min(totalFines, order.advance_amount);
-                                                                            const realPayment = order.advance_paid_amount;
-
-                                                                            return (
-                                                                                <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                                    БОРГ
-                                                                                    <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
-                                                                                        {realPayment > 0 && (
-                                                                                            <>
-                                                                                                <span className="text-slate-700">{realPayment.toLocaleString()}</span>
-                                                                                                {fineToAdvance > 0 && <span className="text-slate-400">+</span>}
-                                                                                            </>
-                                                                                        )}
-                                                                                        {fineToAdvance > 0 && (
-                                                                                            <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                                {fineToAdvance.toLocaleString()} ШТРАФ
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {(realPayment > 0 || fineToAdvance > 0) && (
-                                                                                            <span className="text-slate-400">/</span>
-                                                                                        )}
-                                                                                        <span className="text-slate-600">
-                                                                                            {(order.advance_amount - realPayment - fineToAdvance).toLocaleString()} ₴
-                                                                                        </span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        })()
-                                                                    ) : (
-                                                                        <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
-                                                                            ОЧІКУЄ
-                                                                        </span>
+                                                                        <span className="text-[10px] font-bold text-slate-300 uppercase">Очікує</span>
                                                                     )}
                                                                 </div>
                                                             </td>
                                                         )}
 
-                                                        {/* Stage 2 */}
-                                                        {canSeeStage2 && (
-                                                            <td className="p-1 px-2 text-center bg-emerald-50/20">
-                                                                <div className="flex flex-col items-center">
-                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                                                        Монтаж: {formatDate(order.date_installation)}
-                                                                    </span>
-                                                                    <span className={`text-sm font-black italic mono mb-1 ${isPaidStage2 ? 'text-green-600 underline decoration-2' : 'text-slate-300'}`}>
-                                                                        {finalAmount.toLocaleString()} ₴
-                                                                    </span>
-                                                                    {isPaidStage2 ? (
-                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
-                                                                            {order.date_final_paid ? `Оплата: ${formatDate(order.date_final_paid).slice(0, 5)}` : 'ПОГАШЕНО'}
-                                                                        </span>
-                                                                    ) : order.date_installation ? (
-                                                                        (() => {
-                                                                            // Calculate fines applied to this stage
-                                                                            const orderFines = deductions.filter(d => d.order_id === order.id && !d.is_paid);
-                                                                            const totalFines = orderFines.reduce((sum, d) => sum + d.amount, 0);
+                                                        {showFinancials && (
+                                                            <td className="p-1 px-2 text-center bg-orange-50/20">
+                                                                {unpaidFines > 0 ? (
+                                                                    <span className="text-sm font-black italic text-orange-600">-{unpaidFines.toLocaleString()} ₴</span>
+                                                                ) : (
+                                                                    <span className="text-xs text-slate-400">—</span>
+                                                                )}
+                                                            </td>
+                                                        )}
 
-                                                                            // Fines go to advance first, then final
-                                                                            const fineToAdvance = Math.min(totalFines, order.advance_amount);
-                                                                            const fineToFinal = Math.max(0, Math.min(totalFines - fineToAdvance, stageAmount));
-                                                                            const realPayment = order.final_paid_amount;
-
-                                                                            return (
-                                                                                <div className="text-[10px] font-bold text-red-600 uppercase">
-                                                                                    БОРГ
-                                                                                    <div className="text-xs mt-0.5 flex items-center justify-center gap-1">
-                                                                                        {realPayment > 0 && (
-                                                                                            <>
-                                                                                                <span className="text-slate-700">{realPayment.toLocaleString()}</span>
-                                                                                                {fineToFinal > 0 && <span className="text-slate-400">+</span>}
-                                                                                            </>
-                                                                                        )}
-                                                                                        {fineToFinal > 0 && (
-                                                                                            <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                                {fineToFinal.toLocaleString()} ШТРАФ
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {(realPayment > 0 || fineToFinal > 0) && (
-                                                                                            <span className="text-slate-400">/</span>
-                                                                                        )}
-                                                                                        <span className="text-slate-600">
-                                                                                            {(stageAmount - realPayment - fineToFinal).toLocaleString()} ₴
-                                                                                        </span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        })()
-                                                                    ) : (
-                                                                        <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-2 py-0.5 rounded-md uppercase">
-                                                                            ОЧІКУЄ
-                                                                        </span>
-                                                                    )}
-                                                                </div>
+                                                        {canSeeDebt && (
+                                                            <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                                                {adjustedDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
                                                             </td>
                                                         )}
                                                     </>
                                                 );
                                             })()}
-
-                                            {/* Fines column */}
-                                            {showFinancials && (
-                                                <td className="p-1 px-2 text-center bg-orange-50/20">
-                                                    {(() => {
-                                                        const unpaidFines = deductions
-                                                            .filter(d => d.order_id === order.id)
-                                                            .reduce((sum, d) => sum + d.amount, 0);
-
-                                                        if (unpaidFines > 0) {
-                                                            return (
-                                                                <span className="text-sm font-black italic text-orange-600">
-                                                                    {unpaidFines.toLocaleString()} ₴
-                                                                </span>
-                                                            );
-                                                        } else {
-                                                            return <span className="text-xs text-slate-400">—</span>;
-                                                        }
-                                                    })()}
-                                                </td>
-                                            )}
-
-                                            {canSeeDebt && (
-                                                <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
-                                                    {(() => {
-                                                        const unpaidFines = deductions
-                                                            .filter(d => d.order_id === order.id)
-                                                            .reduce((sum, d) => sum + d.amount, 0);
-
-                                                        let val;
-                                                        if (order.is_critical_debt) {
-                                                            val = order.current_debt - unpaidFines;
-                                                        } else {
-                                                            val = order.remainder_amount - unpaidFines;
-                                                        }
-
-                                                        // Clamp negative values to 0 (fines move to unallocated)
-                                                        const displayVal = Math.max(0, val);
-                                                        return (
-                                                            <span>
-                                                                {displayVal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </td>
-                                            )}
                                         </tr>
                                     );
                                 })
@@ -938,134 +1047,58 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                         </tbody>
                     </table>
 
-                    {/* Mobile Card View */}
+                    {/* Mobile Card View (simplified for constructors only for now) */}
                     <div className="md:hidden divide-y divide-white/20">
                         {filteredOrders.map((order) => {
                             const bonus = order.bonus;
                             const stageAmount = bonus / 2;
-                            const isPaidStage1 = !!order.date_advance_paid;
-                            const isPaidStage2 = !!order.date_final_paid;
+                            const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && order.advance_remaining <= 0.01);
+                            const isPaidStage2 = !!order.date_final_paid || (order.date_installation && order.final_remaining <= 0.01);
                             const unpaidFines = deductions
-                                .filter(d => d.order_id === order.id)
+                                .filter(d => d.order_id === order.id && !d.is_paid)
                                 .reduce((sum, d) => sum + d.amount, 0);
                             const adjustedDebt = order.is_critical_debt
-                                ? order.current_debt - unpaidFines
-                                : order.remainder_amount - unpaidFines;
+                                ? order.current_debt
+                                : order.remainder_amount;
 
                             return (
-                                <div
-                                    key={order.id}
-                                    className="p-4 hover:bg-white/20 transition cursor-pointer bg-white/10 backdrop-blur-md mb-2 rounded-xl border border-white/20"
-                                    onClick={() => onSelectOrder(order)}
-                                >
-                                    {/* Header: ID + Name */}
+                                <div key={order.id} className="p-4 hover:bg-white/20 transition cursor-pointer bg-white/10 backdrop-blur-md mb-2 rounded-xl border border-white/20" onClick={() => onSelectOrder(order)}>
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <div className="text-slate-400 text-xs font-bold">#{order.id}</div>
-                                                <button
-                                                    onClick={(e) => handleEditId(e, order)}
-                                                    className="text-slate-300 hover:text-blue-600 text-xs px-2"
-                                                >
-                                                    ✎
-                                                </button>
-                                            </div>
+                                            <div className="text-slate-400 text-xs font-bold">#{order.id}</div>
                                             <div className="font-bold text-slate-800 text-sm">{order.name}</div>
-                                            <div className="flex gap-1 mt-1 flex-wrap">
-                                                {order.product_types && JSON.parse(order.product_types).map((type, idx) => (
-                                                    <span key={idx} className="bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
-                                                        {type}
-                                                    </span>
-                                                ))}
+                                            <div className="text-[10px] font-bold mt-1">
+                                                {activeTab === 'constructors' ? (
+                                                    <span className="text-blue-600 italic">👨‍🔧 {constructors.find(c => c.id === order.constructor_id)?.full_name || 'Не призначено'}</span>
+                                                ) : (
+                                                    <span className="text-indigo-600 italic">👤 {managers.find(m => m.id === order.manager_id)?.full_name || 'Не призначено'}</span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-[10px] text-slate-400 uppercase mb-0.5">Ціна</div>
                                             <div className="font-black text-slate-800 text-base">{order.price.toLocaleString()} ₴</div>
-                                            {canSeeConstructorPay && (
-                                                <div className="text-[10px] text-blue-500 font-bold">ЗП: {bonus.toLocaleString()} ₴</div>
-                                            )}
                                         </div>
                                     </div>
-
-                                    {/* Date & Status */}
-                                    <div className="mb-3 text-xs">
-                                        <div className="flex items-center gap-2 text-purple-600">
-                                            <span className="font-bold uppercase text-[10px]">Прийнято:</span>
-                                            <span className="font-bold">{formatDate(order.date_to_work)}</span>
-                                        </div>
+                                    <div className={`text-sm font-black text-right ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
+                                        Борг: {Math.max(0, adjustedDebt).toLocaleString()} ₴
                                     </div>
-
-                                    {/* Stages Grid */}
-                                    {(canSeeStage1 || canSeeStage2) && (
-                                        <div className="grid grid-cols-2 gap-2 mb-3">
-                                            {/* Stage I */}
-                                            {canSeeStage1 && (
-                                                <div className="bg-slate-50 rounded-lg p-2">
-                                                    <div className="text-[9px] text-slate-500 uppercase font-bold mb-1">Етап I</div>
-                                                    <div className="text-xs font-black text-slate-700 mb-1">{stageAmount.toLocaleString()} ₴</div>
-                                                    {isPaidStage1 ? (
-                                                        <div className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">ОПЛАЧЕНО</div>
-                                                    ) : order.date_to_work ? (
-                                                        <div className="text-[9px] text-red-600 font-bold">БОРГ</div>
-                                                    ) : (
-                                                        <div className="text-[9px] text-slate-400 font-bold">ОЧІКУЄ</div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Stage II */}
-                                            {canSeeStage2 && (
-                                                <div className="bg-emerald-50/50 rounded-lg p-2">
-                                                    <div className="text-[9px] text-emerald-600 uppercase font-bold mb-1">Етап II</div>
-                                                    <div className="text-xs font-black text-slate-700 mb-1">{stageAmount.toLocaleString()} ₴</div>
-                                                    {isPaidStage2 ? (
-                                                        <div className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">ОПЛАЧЕНО</div>
-                                                    ) : order.date_installation ? (
-                                                        <div className="text-[9px] text-red-600 font-bold">БОРГ</div>
-                                                    ) : (
-                                                        <div className="text-[9px] text-slate-400 font-bold">ОЧІКУЄ</div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Footer: Fines & Debt */}
-                                    {canSeeDebt && (
-                                        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                                            {unpaidFines > 0 && (
-                                                <div className="text-xs">
-                                                    <span className="text-orange-600 font-black">{unpaidFines.toLocaleString()} ₴</span>
-                                                    <span className="text-orange-500 text-[10px] ml-1">штрафи</span>
-                                                </div>
-                                            )}
-                                            <div className={`text-sm font-black ml-auto ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
-                                                {Math.max(0, adjustedDebt).toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
-            )
-            }
+            )}
 
-            {/* Empty State */}
-            {
-                !isCalendarMode && filteredOrders.length === 0 && (
-                    <div className="text-center py-20">
-                        <div className="inline-block p-6 rounded-full bg-slate-50 mb-4">
-                            <span className="text-4xl">📭</span>
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-400">Немає замовлень</h3>
-                        <p className="text-slate-300">Спробуйте змінити фільтри або пошук</p>
+            {viewLayout !== 'calendar' && viewLayout !== 'gantt' && filteredOrders.length === 0 && (
+                <div className="text-center py-20">
+                    <div className="inline-block p-6 rounded-full bg-slate-50 mb-4">
+                        <span className="text-4xl">📭</span>
                     </div>
-                )
-            }
-        </div >
+                    <h3 className="text-lg font-bold text-slate-400">Немає замовлень</h3>
+                    <p className="text-slate-300">Спробуйте змінити фільтри або пошук</p>
+                </div>
+            )}
+        </div>
     );
 };
 

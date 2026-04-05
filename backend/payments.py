@@ -10,6 +10,7 @@ class Payment(SQLModel, table=True):
     allocated_automatically: bool = Field(default=True)
     manual_order_id: Optional[int] = Field(default=None, foreign_key="order.id")
     constructor_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    manager_id: Optional[int] = Field(default=None, foreign_key="user.id")
     notes: Optional[str] = None
 
 class PaymentAllocation(SQLModel, table=True):
@@ -28,3 +29,7 @@ class PaymentRead(SQLModel):
     created_at: datetime
     allocated_automatically: bool
     notes: Optional[str] = None
+    constructor_id: Optional[int] = None
+    manager_id: Optional[int] = None
+    person_name: Optional[str] = None # Added for UI convenience
+    manual_order_id: Optional[int] = None

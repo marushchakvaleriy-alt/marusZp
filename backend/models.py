@@ -2,6 +2,7 @@ from typing import Optional
 from datetime import date
 from sqlmodel import Field, SQLModel
 from pydantic import BaseModel
+from financial_logic import calculate_constructor_financials
 
 # User Model
 class User(SQLModel, table=True):
@@ -101,11 +102,20 @@ class OrderBase(SQLModel):
     advance_paid_amount: float = Field(default=0.0)
     final_paid_amount: float = Field(default=0.0)
     constructor_id: Optional[int] = Field(default=None, foreign_key="user.id") # Link to User
+    manager_id: Optional[int] = Field(default=None, foreign_key="user.id") # Link to Manager
     # Fixed salary and custom stage distribution
     fixed_bonus: Optional[float] = Field(default=None)  # Manager override for exact bonus amount
     custom_stage1_percent: Optional[float] = Field(default=None)  # Override stage 1 %
     custom_stage2_percent: Optional[float] = Field(default=None)  # Override stage 2 %
     date_installation_plan: Optional[date] = None  # Manager's planned date (No effect on constructor)
+    constructive_days: int = Field(default=5)  # Planned duration of "Конструктив"
+    complectation_days: int = Field(default=2)  # Planned duration of "Комплектація"
+    preassembly_days: int = Field(default=1)  # Planned duration of "Предзбірка"
+    installation_days: int = Field(default=3)  # Planned installation duration in days
+    
+    # Manager payment tracking
+    manager_paid_amount: float = Field(default=0.0)
+    date_manager_paid: Optional[date] = None
 
 class Order(OrderBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -138,11 +148,15 @@ class OrderUpdate(SQLModel):
     final_paid_amount: Optional[float] = None
     id: Optional[int] = None # Allow updating ID manually
     constructor_id: Optional[int] = None
+    manager_id: Optional[int] = None
     fixed_bonus: Optional[float] = None
-    custom_stage1_percent: Optional[float] = None
     custom_stage1_percent: Optional[float] = None
     custom_stage2_percent: Optional[float] = None
     date_installation_plan: Optional[date] = None  # v1.6 Manager Plan
+    constructive_days: Optional[int] = None
+    complectation_days: Optional[int] = None
+    preassembly_days: Optional[int] = None
+    installation_days: Optional[int] = None
 
 class OrderRead(OrderBase):
     id: int
@@ -156,51 +170,52 @@ class OrderRead(OrderBase):
     is_critical_debt: bool
     status_payment: str
     constructor_id: Optional[int] = None
+    manager_id: Optional[int] = None
+    manager_bonus: float = 0.0
+    manager_paid_amount: float = 0.0
+    manager_remaining: float = 0.0
 
     @classmethod
-    def from_order(cls, order: Order, constructor=None):
-        # 1. Determine bonus amount
-        if order.fixed_bonus is not None:
-            # Manager override: use exact fixed amount
-            bonus = order.fixed_bonus
-        elif constructor and hasattr(constructor, 'salary_mode') and hasattr(constructor, 'salary_percent'):
-            # Calculate based on constructor's salary configuration
-            if constructor.salary_mode == 'fixed_amount':
-                # Fixed amount per order (salary_percent stores the fixed amount)
-                bonus = constructor.salary_percent
-            elif constructor.salary_mode == 'materials_percent':
-                # Calculate from material cost
-                bonus = (order.material_cost or 0) * (constructor.salary_percent / 100)
+    def from_order(cls, order: Order, session_or_constructor=None):
+        constructor = None
+        manager = None
+        session = None
+        # Accept either a session or a constructor for backwards compatibility
+        from sqlmodel import Session
+        if isinstance(session_or_constructor, Session):
+            session = session_or_constructor
+            if order.constructor_id:
+                from models import User
+                constructor = session.get(User, order.constructor_id)
+            if order.manager_id:
+                from models import User
+                manager = session.get(User, order.manager_id)
+        else:
+            constructor = session_or_constructor
+
+        constructor_financials = calculate_constructor_financials(
+            order,
+            session=session,
+            constructor=constructor,
+        )
+        bonus = constructor_financials["bonus"]
+
+        # 1b. Determine manager bonus amount
+        manager_bonus = 0.0
+        if manager and hasattr(manager, 'salary_mode') and hasattr(manager, 'salary_percent'):
+            if manager.salary_mode == 'fixed_amount':
+                manager_bonus = manager.salary_percent
+            elif manager.salary_mode == 'materials_percent':
+                manager_bonus = (order.material_cost or 0) * (manager.salary_percent / 100)
             else:
-                # Default: calculate from sales price (sales_percent)
-                bonus = order.price * (constructor.salary_percent / 100)
-        else:
-            # Fallback to old logic (5% of sales price)
-            bonus = order.price * 0.05
+                manager_bonus = order.price * (manager.salary_percent / 100)
         
-        # 2. Determine stage distribution percentages
-        if order.custom_stage1_percent is not None:
-            # Per-order override
-            stage1_pct = order.custom_stage1_percent
-            stage2_pct = order.custom_stage2_percent if order.custom_stage2_percent is not None else (100 - stage1_pct)
-            print(f"🔧 Order {order.id} using CUSTOM stages: {stage1_pct}/{stage2_pct}")
-        elif constructor and hasattr(constructor, 'payment_stage1_percent'):
-            # Use constructor's default stage distribution
-            stage1_pct = constructor.payment_stage1_percent
-            stage2_pct = constructor.payment_stage2_percent
-            print(f"👤 Order {order.id} using constructor '{constructor.full_name}' stages: {stage1_pct}/{stage2_pct}")
-        else:
-            # Fallback: 50/50
-            stage1_pct = 50.0
-            stage2_pct = 50.0
-            print(f"⚠️ Order {order.id} using FALLBACK stages: {stage1_pct}/{stage2_pct}")
-        
-        # 3. Calculate stage amounts
-        advance_amount = bonus * (stage1_pct / 100)
-        final_amount = bonus * (stage2_pct / 100)
-        
-        advance_remaining = max(0, advance_amount - order.advance_paid_amount)
-        final_remaining = max(0, final_amount - order.final_paid_amount)
+        manager_remaining = max(0, manager_bonus - (order.manager_paid_amount or 0))
+
+        advance_amount = constructor_financials["advance_amount"]
+        final_amount = constructor_financials["final_amount"]
+        advance_remaining = constructor_financials["advance_remaining"]
+        final_remaining = constructor_financials["final_remaining"]
         
         # Auto-set payment dates if fully paid
         date_advance_paid = order.date_advance_paid
@@ -238,6 +253,10 @@ class OrderRead(OrderBase):
             fixed_bonus=order.fixed_bonus,
             custom_stage1_percent=order.custom_stage1_percent,
             custom_stage2_percent=order.custom_stage2_percent,
+            constructive_days=order.constructive_days or 5,
+            complectation_days=order.complectation_days or 2,
+            preassembly_days=order.preassembly_days or 1,
+            installation_days=order.installation_days or 3,
             bonus=bonus,
             advance_amount=advance_amount,
             advance_remaining=advance_remaining,
@@ -245,13 +264,15 @@ class OrderRead(OrderBase):
             final_remaining=final_remaining,
             remainder_amount=advance_remaining + final_remaining,
             is_critical_debt=(
-                # Work started but advance not paid = DEBT
-                (order.date_to_work is not None and (date_advance_paid is None and order.date_advance_paid is None)) or
-                # Installation done but final payment not paid = DEBT
-                (order.date_installation is not None and (date_final_paid is None and order.date_final_paid is None))
+                (order.date_to_work is not None and advance_remaining > 0.01) or
+                (order.date_installation is not None and final_remaining > 0.01)
             ),
             status_payment=status,
-            constructor_id=order.constructor_id
+            constructor_id=order.constructor_id,
+            manager_id=order.manager_id,
+            manager_bonus=manager_bonus,
+            manager_paid_amount=order.manager_paid_amount,
+            manager_remaining=manager_remaining
         )
 
     def __init__(self, **kwargs):
@@ -300,6 +321,29 @@ class DeductionRead(BaseModel):
 class DeductionUpdate(BaseModel):
     is_paid: Optional[bool] = None
     date_paid: Optional[date] = None
+
+
+class OrderCalculationSnapshotRead(BaseModel):
+    bonus: float
+    advance_amount: float
+    final_amount: float
+    advance_paid_amount: float
+    final_paid_amount: float
+    advance_remaining: float
+    final_remaining: float
+    current_debt: float
+    remainder_amount: float
+    unpaid_deductions: float
+
+
+class OrderCalculationHistoryItemRead(BaseModel):
+    event_date: Optional[date] = None
+    event_type: str
+    title: str
+    description: str
+    amount: float = 0.0
+    stage: Optional[str] = None
+    snapshot: OrderCalculationSnapshotRead
 
 # Activity Log Model
 class ActivityLog(SQLModel, table=True):

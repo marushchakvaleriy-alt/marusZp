@@ -117,6 +117,9 @@ function App() {
         }
     };
 
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+    const isSuperAdmin = user?.role === 'super_admin';
+
     return (
         <div className="min-h-screen p-4 lg:p-8 relative">
             <SeasonBackground season={season} />
@@ -136,12 +139,12 @@ function App() {
                         <div className="mb-6 flex justify-end gap-3 flex-wrap items-center">
                             <div className="mr-auto flex items-center gap-2">
                                 <span className="text-slate-500 font-bold">
-                                    {user.username} ({user.role === 'admin' ? 'Адмін' : user.role === 'manager' ? 'Менеджер' : 'Конструктор'})
+                                    {user.username} ({user.role === 'super_admin' ? 'Супер-Адмін' : user.role === 'admin' ? 'Адмін' : user.role === 'manager' ? 'Менеджер' : 'Конструктор'})
                                 </span>
                                 <button onClick={logout} className="text-red-500 hover:text-red-700 text-sm font-bold underline">Вийти</button>
                             </div>
 
-                            {user.role === 'admin' && (
+                            {isAdmin && (
                                 <>
                                     <button
                                         onClick={() => navigateTo('users')}
@@ -149,12 +152,14 @@ function App() {
                                     >
                                         <i className="fas fa-users-cog"></i> Користувачі
                                     </button>
+                                    {isSuperAdmin && (
                                     <button
                                         onClick={handleResetDatabase}
                                         className="px-6 py-2 bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 hover:bg-black transition flex items-center gap-2"
                                     >
                                         <i className="fas fa-trash-alt"></i> Очистити все
                                     </button>
+                                    )}
                                 </>
                             )}
                             <button
@@ -167,9 +172,9 @@ function App() {
                                 onClick={() => navigateTo('deductions')}
                                 className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
                             >
-                                <i className="fas fa-exclamation-triangle"></i> {(user.role === 'admin' || user.role === 'manager') ? 'Провини конструкторів' : 'Мої провини'}
+                                <i className="fas fa-exclamation-triangle"></i> {(isAdmin || user.role === 'manager') ? 'Провини конструкторів' : 'Мої провини'}
                             </button>
-                            {(user.role === 'admin' || user.role === 'constructor') && (
+                            {(isAdmin || user.role === 'constructor') && (
                                 <button
                                     onClick={() => navigateTo('payments')}
                                     className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"

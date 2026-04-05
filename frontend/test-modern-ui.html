@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TechPay Lite - UI Preview</title>
+    <style>
+        :root {
+            --bg: #f3f7fb;
+            --bg-soft: #e8f1ff;
+            --surface: #ffffffcc;
+            --surface-solid: #ffffff;
+            --border: #dbe7f4;
+            --text: #102236;
+            --text-muted: #5b7088;
+            --brand: #0ea5a3;
+            --brand-soft: #d7f5f4;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --shadow: 0 18px 42px rgba(16, 34, 54, 0.1);
+            --radius-xl: 22px;
+            --radius-lg: 16px;
+            --radius-sm: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: "Manrope", "Segoe UI Variable", "Trebuchet MS", sans-serif;
+            background:
+                radial-gradient(1200px 600px at 5% -10%, #d7f5f4 0%, transparent 60%),
+                radial-gradient(900px 500px at 95% -10%, #dbeafe 0%, transparent 60%),
+                linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 45%, #f7fafc 100%);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.45;
+        }
+
+        .wrap {
+            width: min(1200px, 94%);
+            margin: 26px auto 40px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        .brand-badge {
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, var(--brand), #0284c7);
+            color: #fff;
+            border-radius: 12px;
+            font-size: 18px;
+        }
+
+        .status {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: #eefbf6;
+            color: var(--success);
+            border: 1px solid #c5f0dc;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .hero {
+            margin-top: 18px;
+            padding: 24px;
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border);
+            background: linear-gradient(120deg, #ffffffdd, #f5fbffdd);
+            box-shadow: var(--shadow);
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 20px;
+        }
+
+        .hero h1 {
+            font-size: clamp(1.4rem, 2vw, 2rem);
+            line-height: 1.15;
+            margin-bottom: 8px;
+        }
+
+        .hero p {
+            color: var(--text-muted);
+            max-width: 58ch;
+        }
+
+        .hero-actions {
+            margin-top: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .btn {
+            border: 0;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+            border-radius: 12px;
+            padding: 11px 15px;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--brand), #0284c7);
+            color: #fff;
+            box-shadow: 0 10px 20px rgba(2, 132, 199, 0.25);
+        }
+
+        .btn-ghost {
+            background: #fff;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .hero-panel {
+            background: #f8fbff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px;
+        }
+
+        .hero-panel h3 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .hero-list {
+            display: grid;
+            gap: 8px;
+            list-style: none;
+        }
+
+        .hero-list li {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 14px;
+        }
+
+        .stats {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .stat {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            background: var(--surface-solid);
+            padding: 14px;
+            box-shadow: 0 8px 24px rgba(16, 34, 54, 0.08);
+        }
+
+        .stat small {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        .stat strong {
+            display: block;
+            margin-top: 6px;
+            font-size: 1.2rem;
+            line-height: 1.2;
+        }
+
+        .layout {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: 1.8fr 1fr;
+            gap: 14px;
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            background: var(--surface-solid);
+            box-shadow: 0 12px 30px rgba(16, 34, 54, 0.08);
+            overflow: hidden;
+        }
+
+        .card-head {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        .search {
+            width: 220px;
+            max-width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            font: inherit;
+            color: var(--text);
+            background: #f8fbff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 11px 14px;
+            border-bottom: 1px solid #edf2f8;
+        }
+
+        th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: var(--text-muted);
+            background: #fbfdff;
+        }
+
+        .amount {
+            font-weight: 800;
+            color: var(--success);
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+
+        .tag-warn {
+            color: var(--warning);
+            background: #fff8eb;
+            border-color: #fde8c4;
+        }
+
+        .tag-ok {
+            color: var(--success);
+            background: #edfdf7;
+            border-color: #c5f0dc;
+        }
+
+        .side {
+            padding: 14px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .quick-btn {
+            border: 1px solid var(--border);
+            background: #f8fbff;
+            border-radius: 12px;
+            padding: 11px 12px;
+            font: inherit;
+            font-weight: 700;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.18s ease, transform 0.18s ease;
+        }
+
+        .quick-btn:hover {
+            background: #eef6ff;
+            transform: translateY(-1px);
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(8px);
+            animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+        }
+
+        @keyframes rise {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 1000px) {
+            .hero,
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 640px) {
+            .wrap {
+                width: min(100%, 96%);
+                margin-top: 14px;
+            }
+
+            .hero,
+            .card-head,
+            .side {
+                padding: 12px;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            th:nth-child(2),
+            td:nth-child(2) {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <header class="topbar reveal" style="animation-delay: 0.03s">
+            <div class="brand">
+                <div class="brand-badge">TP</div>
+                <div>TechPay Lite · Тестовий сучасний інтерфейс</div>
+            </div>
+            <div class="status">Система активна</div>
+        </header>
+
+        <section class="hero reveal" style="animation-delay: 0.08s">
+            <div>
+                <h1>Легкий, чистий і сучасний стиль для вашого застосунку</h1>
+                <p>
+                    Це тестовий макет HTML: світлий інтерфейс, краща читабельність, м'які акценти
+                    і мінімум візуального шуму. Якщо напрям подобається, перенесемо цей стиль у React.
+                </p>
+                <div class="hero-actions">
+                    <button class="btn btn-primary">Переглянути замовлення</button>
+                    <button class="btn btn-ghost">Відкрити аналітику</button>
+                </div>
+            </div>
+            <aside class="hero-panel">
+                <h3>Швидкий стан</h3>
+                <ul class="hero-list">
+                    <li><span>Активні замовлення</span><strong>48</strong></li>
+                    <li><span>Борг до виплати</span><strong>146 200 грн</strong></li>
+                    <li><span>Вільні кошти</span><strong>18 450 грн</strong></li>
+                    <li><span>Оновлення</span><strong>2 хв тому</strong></li>
+                </ul>
+            </aside>
+        </section>
+
+        <section class="stats">
+            <article class="stat reveal" style="animation-delay: 0.12s">
+                <small>Отримано</small>
+                <strong>1 247 400 грн</strong>
+            </article>
+            <article class="stat reveal" style="animation-delay: 0.16s">
+                <small>Розподілено</small>
+                <strong>1 189 050 грн</strong>
+            </article>
+            <article class="stat reveal" style="animation-delay: 0.2s">
+                <small>Провини</small>
+                <strong>32 300 грн</strong>
+            </article>
+            <article class="stat reveal" style="animation-delay: 0.24s">
+                <small>У роботі</small>
+                <strong>11 команд</strong>
+            </article>
+        </section>
+
+        <section class="layout">
+            <article class="card reveal" style="animation-delay: 0.28s">
+                <div class="card-head">
+                    <div class="card-title">Реєстр замовлень</div>
+                    <input class="search" placeholder="Пошук за ID або назвою..." />
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Проєкт</th>
+                            <th>Статус</th>
+                            <th>Борг</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>#184</td>
+                            <td>Кухня / ЖК Sky</td>
+                            <td><span class="tag tag-warn">Монтаж в процесі</span></td>
+                            <td class="amount">14 800 грн</td>
+                        </tr>
+                        <tr>
+                            <td>#183</td>
+                            <td>Шафа / Липинського</td>
+                            <td><span class="tag tag-ok">Конструктив закрито</span></td>
+                            <td class="amount">4 600 грн</td>
+                        </tr>
+                        <tr>
+                            <td>#182</td>
+                            <td>Передпокій / Сихів</td>
+                            <td><span class="tag tag-warn">Очікує оплату</span></td>
+                            <td class="amount">7 300 грн</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </article>
+
+            <aside class="card side reveal" style="animation-delay: 0.32s">
+                <div class="card-title">Швидкі дії</div>
+                <button class="quick-btn">+ Додати нове замовлення</button>
+                <button class="quick-btn">💸 Додати платіж</button>
+                <button class="quick-btn">👥 Користувачі та ролі</button>
+                <button class="quick-btn">📊 Звіт по конструкторах</button>
+                <button class="quick-btn">⚙ Налаштування системи</button>
+            </aside>
+        </section>
+    </div>
+</body>
+</html>

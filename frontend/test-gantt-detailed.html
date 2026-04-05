@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gantt Preview - Detailed</title>
+    <style>
+        :root {
+            --bg: #edf4f7;
+            --bg-2: #f8fbfc;
+            --surface: rgba(255, 255, 255, 0.88);
+            --surface-solid: #ffffff;
+            --border: #d8e3ea;
+            --text: #173042;
+            --muted: #6c8294;
+            --line: #c9d6df;
+            --today: #e45151;
+            --constructive: #4f8df5;
+            --complectation: #f3aa2c;
+            --preassembly: #8c69f8;
+            --installation: #2fb67d;
+            --shadow: 0 18px 44px rgba(23, 48, 66, 0.1);
+            --radius-xl: 24px;
+            --radius-lg: 18px;
+            --radius-md: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: "Manrope", "Segoe UI Variable", "Trebuchet MS", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(900px 420px at 5% -10%, #d9f5ec 0%, transparent 60%),
+                radial-gradient(1000px 520px at 100% 0%, #dceeff 0%, transparent 60%),
+                linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+            min-height: 100vh;
+        }
+
+        .page {
+            width: min(1600px, 96vw);
+            margin: 22px auto 40px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.35fr 0.9fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            background: var(--surface);
+            backdrop-filter: blur(14px);
+            box-shadow: var(--shadow);
+        }
+
+        .hero-main {
+            padding: 22px 24px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: #e8f4ff;
+            color: #2c5c8b;
+            border: 1px solid #cfe2f4;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        h1 {
+            margin-top: 14px;
+            font-size: clamp(2rem, 2.6vw, 3rem);
+            line-height: 1.05;
+            font-style: italic;
+            font-weight: 900;
+            letter-spacing: -0.03em;
+        }
+
+        .hero-main p {
+            margin-top: 12px;
+            max-width: 68ch;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.55;
+        }
+
+        .hero-notes {
+            padding: 20px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .note {
+            padding: 14px 15px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .note strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .note span {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .pill {
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .pill.active {
+            background: linear-gradient(135deg, #3178ea, #1659c9);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .gantt-shell {
+            overflow: hidden;
+        }
+
+        .shell-head {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.75);
+        }
+
+        .shell-head h2 {
+            font-size: 28px;
+            font-style: italic;
+            font-weight: 900;
+            letter-spacing: -0.03em;
+        }
+
+        .shell-head p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .legend {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+        }
+
+        .gantt {
+            padding: 16px;
+            overflow-x: auto;
+        }
+
+        .gantt-grid {
+            min-width: 1420px;
+            display: grid;
+            grid-template-columns: 370px 1fr;
+            gap: 12px;
+        }
+
+        .timeline-header {
+            position: relative;
+            height: 76px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            background:
+                repeating-linear-gradient(
+                    to right,
+                    transparent 0,
+                    transparent calc(14.285% - 1px),
+                    rgba(201, 214, 223, 0.8) calc(14.285% - 1px),
+                    rgba(201, 214, 223, 0.8) 14.285%
+                ),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 248, 251, 0.95));
+        }
+
+        .header-label {
+            position: absolute;
+            top: 12px;
+            font-size: 12px;
+            font-weight: 900;
+            color: #587189;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .header-date {
+            position: absolute;
+            bottom: 12px;
+            transform: translateX(-50%);
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        .row {
+            display: contents;
+        }
+
+        .info-card,
+        .track {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .info-card {
+            padding: 16px;
+        }
+
+        .info-card h3 {
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .meta {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .meta-badge {
+            padding: 6px 9px;
+            border-radius: 999px;
+            background: #f3f8fb;
+            border: 1px solid var(--border);
+            color: #5e7386;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .dates {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 12px;
+        }
+
+        .date-box {
+            padding: 10px 11px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #fbfdfe;
+        }
+
+        .date-box small {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 10px;
+            font-weight: 900;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .date-box strong {
+            font-size: 14px;
+            font-weight: 900;
+        }
+
+        .durations {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .dur-box {
+            padding: 9px 8px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .dur-box small {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .dur-box strong {
+            display: block;
+            margin-top: 3px;
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .track {
+            position: relative;
+            min-height: 206px;
+            padding: 24px 16px 18px;
+            background:
+                repeating-linear-gradient(
+                    to right,
+                    rgba(0, 0, 0, 0) 0,
+                    rgba(0, 0, 0, 0) calc(14.285% - 1px),
+                    rgba(216, 227, 234, 0.9) calc(14.285% - 1px),
+                    rgba(216, 227, 234, 0.9) 14.285%
+                ),
+                linear-gradient(180deg, #ffffff, #f8fbfd);
+        }
+
+        .track::before {
+            content: "";
+            position: absolute;
+            inset: 16px 16px auto;
+            height: 2px;
+            background: rgba(216, 227, 234, 0.6);
+        }
+
+        .today-line {
+            position: absolute;
+            top: 16px;
+            bottom: 16px;
+            width: 2px;
+            background: rgba(228, 81, 81, 0.9);
+        }
+
+        .today-label {
+            position: absolute;
+            top: 4px;
+            transform: translateX(-50%);
+            font-size: 10px;
+            font-weight: 900;
+            color: var(--today);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .lane {
+            position: absolute;
+            left: 16px;
+            right: 16px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+        }
+
+        .lane-label {
+            position: absolute;
+            left: 0;
+            top: -18px;
+            font-size: 11px;
+            font-weight: 900;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .bar {
+            position: absolute;
+            height: 14px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.01em;
+            padding: 0 10px;
+            box-shadow: 0 10px 18px rgba(23, 48, 66, 0.12);
+            white-space: nowrap;
+        }
+
+        .bar.constructive { background: var(--constructive); }
+        .bar.complectation { background: var(--complectation); }
+        .bar.preassembly { background: var(--preassembly); }
+        .bar.installation { background: var(--installation); }
+
+        .milestone {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            border: 2px solid #fff;
+            box-shadow: 0 6px 12px rgba(23, 48, 66, 0.12);
+        }
+
+        .milestone-label {
+            position: absolute;
+            top: -22px;
+            transform: translateX(-50%);
+            font-size: 10px;
+            font-weight: 900;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        .milestone.work { background: #2634d8; }
+        .milestone.deadline { background: #d93838; }
+        .milestone.install-plan { background: #138c67; }
+        .milestone.install-fact { background: #13493a; }
+
+        .hint {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        @media (max-width: 1180px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .page {
+                width: min(100vw, 98vw);
+                margin: 12px auto 30px;
+            }
+
+            .hero-main,
+            .hero-notes,
+            .shell-head,
+            .gantt,
+            .info-card {
+                padding: 16px;
+            }
+
+            .dates,
+            .durations {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="hero">
+            <div class="panel hero-main">
+                <div class="eyebrow">Тестовий HTML прототип</div>
+                <h1>Gantt, який реально читається по датах, етапах і строках</h1>
+                <p>
+                    Тут макет не "смужки заради смужок", а екран, де менеджер одразу бачить дедлайн,
+                    старт монтажу, тривалість кожного етапу, тижневу сітку і фактичні контрольні дати.
+                </p>
+            </div>
+
+            <div class="panel hero-notes">
+                <div class="note">
+                    <strong>Що має бути зрозуміло за 3 секунди</strong>
+                    <span>Коли починається кожен етап, коли дедлайн, коли стартує монтаж і де вже є ризик запізнення.</span>
+                </div>
+                <div class="note">
+                    <strong>Що тут покращено</strong>
+                    <span>Є шкала по тижнях, підписані дати, підсумок по кожному замовленню зліва і окремі підписи всередині смуг.</span>
+                </div>
+            </div>
+        </section>
+
+        <div class="toolbar">
+            <div class="pill active">Gantt: детальний режим</div>
+            <div class="pill">Квітень 2026</div>
+            <div class="pill">Всі менеджери</div>
+            <div class="pill">Всі конструктори</div>
+            <div class="pill">Тільки активні</div>
+        </div>
+
+        <section class="panel gantt-shell">
+            <div class="shell-head">
+                <h2>Планування Gantt</h2>
+                <p>Повний цикл: конструктив, комплектація, предзбірка, монтаж. Шкала нижче показує не лише смуги, а й ключові дати.</p>
+                <div class="legend">
+                    <div class="legend-item"><span class="dot" style="background:#2634d8"></span>Передано в роботу</div>
+                    <div class="legend-item"><span class="dot" style="background:#d93838"></span>Дедлайн конструктиву</div>
+                    <div class="legend-item"><span class="dot" style="background:#4f8df5"></span>Конструктив</div>
+                    <div class="legend-item"><span class="dot" style="background:#f3aa2c"></span>Комплектація</div>
+                    <div class="legend-item"><span class="dot" style="background:#8c69f8"></span>Предзбірка</div>
+                    <div class="legend-item"><span class="dot" style="background:#2fb67d"></span>Монтаж</div>
+                </div>
+            </div>
+
+            <div class="gantt">
+                <div class="gantt-grid">
+                    <div></div>
+
+                    <div class="timeline-header">
+                        <div class="header-label" style="left: 2%;">Квітень</div>
+                        <div class="header-label" style="left: 72%;">Травень</div>
+
+                        <div class="header-date" style="left: 0%;">04.04</div>
+                        <div class="header-date" style="left: 14.285%;">11.04</div>
+                        <div class="header-date" style="left: 28.57%;">18.04</div>
+                        <div class="header-date" style="left: 42.855%;">25.04</div>
+                        <div class="header-date" style="left: 57.14%;">02.05</div>
+                        <div class="header-date" style="left: 71.425%;">09.05</div>
+                        <div class="header-date" style="left: 85.71%;">16.05</div>
+                        <div class="header-date" style="left: 100%;">23.05</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="info-card">
+                            <h3>#3 Вавпан</h3>
+                            <div class="meta">
+                                <div class="meta-badge">Менеджер: Карпінський</div>
+                                <div class="meta-badge">Конструктор: Білоган</div>
+                            </div>
+
+                            <div class="dates">
+                                <div class="date-box">
+                                    <small>Передано в роботу</small>
+                                    <strong>04.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Дедлайн конструктиву</small>
+                                    <strong>08.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Старт монтажу</small>
+                                    <strong>16.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Факт монтажу</small>
+                                    <strong class="muted">ще не здано</strong>
+                                </div>
+                            </div>
+
+                            <div class="durations">
+                                <div class="dur-box"><small>Констр.</small><strong>5д</strong></div>
+                                <div class="dur-box"><small>Компл.</small><strong>3д</strong></div>
+                                <div class="dur-box"><small>Предзб.</small><strong>2д</strong></div>
+                                <div class="dur-box"><small>Монтаж</small><strong>4д</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="track">
+                            <div class="today-line" style="left: calc(28.57% + 16px);"></div>
+                            <div class="today-label" style="left: calc(28.57% + 16px);">Сьогодні</div>
+
+                            <div class="lane" style="top: 26px;">
+                                <div class="lane-label">Конструктив</div>
+                                <div class="bar constructive" style="left: 0%; width: 15%;">04.04 - 08.04</div>
+                            </div>
+                            <div class="lane" style="top: 66px;">
+                                <div class="lane-label">Комплектація</div>
+                                <div class="bar complectation" style="left: 18%; width: 10%;">09.04 - 11.04</div>
+                            </div>
+                            <div class="lane" style="top: 106px;">
+                                <div class="lane-label">Предзбірка</div>
+                                <div class="bar preassembly" style="left: 30%; width: 7%;">12.04 - 13.04</div>
+                            </div>
+                            <div class="lane" style="top: 146px;">
+                                <div class="lane-label">Монтаж</div>
+                                <div class="bar installation" style="left: 40%; width: 18%;">16.04 - 19.04</div>
+                            </div>
+
+                            <div class="milestone work" style="left: 0%; top: 16px;"></div>
+                            <div class="milestone-label" style="left: 0%; top: 18px;">04.04 робота</div>
+
+                            <div class="milestone deadline" style="left: 15%; top: 16px;"></div>
+                            <div class="milestone-label" style="left: 15%; top: 18px;">08.04 дедлайн</div>
+
+                            <div class="milestone install-plan" style="left: 40%; top: 134px;"></div>
+                            <div class="milestone-label" style="left: 40%; top: 136px;">16.04 старт монтажу</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="info-card">
+                            <h3>#2 Алрагран</h3>
+                            <div class="meta">
+                                <div class="meta-badge">Менеджер: Романюк</div>
+                                <div class="meta-badge">Конструктор: Левицький</div>
+                            </div>
+
+                            <div class="dates">
+                                <div class="date-box">
+                                    <small>Передано в роботу</small>
+                                    <strong>06.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Дедлайн конструктиву</small>
+                                    <strong>10.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Старт монтажу</small>
+                                    <strong>18.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Факт монтажу</small>
+                                    <strong>22.04.2026</strong>
+                                </div>
+                            </div>
+
+                            <div class="durations">
+                                <div class="dur-box"><small>Констр.</small><strong>4д</strong></div>
+                                <div class="dur-box"><small>Компл.</small><strong>3д</strong></div>
+                                <div class="dur-box"><small>Предзб.</small><strong>1д</strong></div>
+                                <div class="dur-box"><small>Монтаж</small><strong>4д</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="track">
+                            <div class="today-line" style="left: calc(28.57% + 16px);"></div>
+                            <div class="today-label" style="left: calc(28.57% + 16px);">Сьогодні</div>
+
+                            <div class="lane" style="top: 26px;">
+                                <div class="lane-label">Конструктив</div>
+                                <div class="bar constructive" style="left: 6%; width: 13%;">06.04 - 10.04</div>
+                            </div>
+                            <div class="lane" style="top: 66px;">
+                                <div class="lane-label">Комплектація</div>
+                                <div class="bar complectation" style="left: 21%; width: 10%;">11.04 - 13.04</div>
+                            </div>
+                            <div class="lane" style="top: 106px;">
+                                <div class="lane-label">Предзбірка</div>
+                                <div class="bar preassembly" style="left: 33%; width: 4%;">14.04</div>
+                            </div>
+                            <div class="lane" style="top: 146px;">
+                                <div class="lane-label">Монтаж</div>
+                                <div class="bar installation" style="left: 46%; width: 16%;">18.04 - 21.04</div>
+                            </div>
+
+                            <div class="milestone work" style="left: 6%; top: 16px;"></div>
+                            <div class="milestone-label" style="left: 6%; top: 18px;">06.04 робота</div>
+
+                            <div class="milestone deadline" style="left: 19%; top: 16px;"></div>
+                            <div class="milestone-label" style="left: 19%; top: 18px;">10.04 дедлайн</div>
+
+                            <div class="milestone install-plan" style="left: 46%; top: 134px;"></div>
+                            <div class="milestone-label" style="left: 46%; top: 136px;">18.04 старт</div>
+
+                            <div class="milestone install-fact" style="left: 58%; top: 134px;"></div>
+                            <div class="milestone-label" style="left: 58%; top: 136px;">22.04 факт</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="info-card">
+                            <h3>#1 Sdfdsf</h3>
+                            <div class="meta">
+                                <div class="meta-badge">Менеджер: Кравець</div>
+                                <div class="meta-badge">Конструктор: Савчук</div>
+                            </div>
+
+                            <div class="dates">
+                                <div class="date-box">
+                                    <small>Передано в роботу</small>
+                                    <strong>03.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Дедлайн конструктиву</small>
+                                    <strong>09.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Старт монтажу</small>
+                                    <strong>20.04.2026</strong>
+                                </div>
+                                <div class="date-box">
+                                    <small>Факт монтажу</small>
+                                    <strong class="muted">ще не здано</strong>
+                                </div>
+                            </div>
+
+                            <div class="durations">
+                                <div class="dur-box"><small>Констр.</small><strong>6д</strong></div>
+                                <div class="dur-box"><small>Компл.</small><strong>4д</strong></div>
+                                <div class="dur-box"><small>Предзб.</small><strong>2д</strong></div>
+                                <div class="dur-box"><small>Монтаж</small><strong>5д</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="track">
+                            <div class="today-line" style="left: calc(28.57% + 16px);"></div>
+                            <div class="today-label" style="left: calc(28.57% + 16px);">Сьогодні</div>
+
+                            <div class="lane" style="top: 26px;">
+                                <div class="lane-label">Конструктив</div>
+                                <div class="bar constructive" style="left: 0%; width: 18%;">03.04 - 09.04</div>
+                            </div>
+                            <div class="lane" style="top: 66px;">
+                                <div class="lane-label">Комплектація</div>
+                                <div class="bar complectation" style="left: 21%; width: 13%;">10.04 - 13.04</div>
+                            </div>
+                            <div class="lane" style="top: 106px;">
+                                <div class="lane-label">Предзбірка</div>
+                                <div class="bar preassembly" style="left: 36%; width: 7%;">14.04 - 15.04</div>
+                            </div>
+                            <div class="lane" style="top: 146px;">
+                                <div class="lane-label">Монтаж</div>
+                                <div class="bar installation" style="left: 50%; width: 20%;">20.04 - 24.04</div>
+                            </div>
+
+                            <div class="milestone work" style="left: 0%; top: 16px;"></div>
+                            <div class="milestone-label" style="left: 0%; top: 18px;">03.04 робота</div>
+
+                            <div class="milestone deadline" style="left: 18%; top: 16px;"></div>
+                            <div class="milestone-label" style="left: 18%; top: 18px;">09.04 дедлайн</div>
+
+                            <div class="milestone install-plan" style="left: 50%; top: 134px;"></div>
+                            <div class="milestone-label" style="left: 50%; top: 136px;">20.04 старт</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hint">
+                Ідея цього макета така: зліва ми читаємо конкретні дати і тривалості, а справа одразу бачимо,
+                як етапи лягають на часову шкалу. Якщо вам зайде саме такий формат, наступним кроком перенесемо
+                його в React один в один, а вже потім додамо drag-and-drop, фільтри по менеджеру і перевантаження по днях.
+            </div>
+        </section>
+    </main>
+</body>
+</html>

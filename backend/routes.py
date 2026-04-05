@@ -8,41 +8,89 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select, desc, asc
 from sqlalchemy import text
 from database import get_session
-from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead, User, UserCreate, UserRead, UserUpdate
+from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead, User, UserCreate, UserRead, UserUpdate, OrderCalculationHistoryItemRead
 from payments import Payment, PaymentAllocation, PaymentRead
 from payment_service import PaymentDistributionService
+from financial_logic import build_constructor_financial_snapshot, resolve_constructor_base_financials
 from pydantic import BaseModel
-from auth import get_current_user, get_admin_user, get_manager_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth import get_current_user, get_admin_user, get_super_admin_user, get_manager_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 from settings import load_settings, save_settings, Settings
-from file_utils import ensure_project_structure, get_file_path, sanitize_filename
+from file_utils import ensure_project_structure, get_file_path, sanitize_filename, normalize_folder_category
 from telegram_service import TelegramService
 
 router = APIRouter()
+
+ADMIN_ROLES = {"admin", "super_admin"}
+MANAGER_ROLES = {"admin", "manager", "super_admin"}
+
+
+def is_admin(user: User) -> bool:
+    return user.role in ADMIN_ROLES
+
+
+def can_access_order(user: User, order: Order) -> bool:
+    return user.role in MANAGER_ROLES or order.constructor_id == user.id
+
+
+def ensure_order_access(user: User, order: Order):
+    if not can_access_order(user, order):
+        raise HTTPException(status_code=403, detail="Access denied for this order")
+
+
+def is_payment_visible_to_constructor(
+    session: Session,
+    payment: Payment,
+    constructor_id: int
+) -> bool:
+    if payment.constructor_id == constructor_id:
+        return True
+
+    allocations = session.exec(
+        select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
+    ).all()
+    if not allocations:
+        return False
+
+    order_ids = [a.order_id for a in allocations]
+    if not order_ids:
+        return False
+
+    own_order = session.exec(
+        select(Order.id)
+        .where(Order.id.in_(order_ids))
+        .where(Order.constructor_id == constructor_id)
+        .limit(1)
+    ).first()
+    return own_order is not None
 
 # --- AUTH ROUTES ---
 
 @router.post("/token")
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     print(f"--- LOGIN ATTEMPT ---")
-    print(f"Username received: '{form_data.username}'")
-    print(f"Password received: '{form_data.password}'")
-    
-    user = session.exec(select(User).where(User.username == form_data.username)).first()
-    
-    if not user:
-        print("RESULT: User not found in DB!")
-    else:
-        print(f"User found: ID {user.id}, Role {user.role}")
-        print(f"Stored Hash: {user.password_hash}")
+    login_value = (form_data.username or "").strip()
+    print(f"Username received: '{login_value}'")
+
+    user = session.exec(select(User).where(User.username == login_value)).first()
+    # Support login by email as well, because users often enter email in the login field.
+    if not user and "@" in login_value:
+        user = session.exec(select(User).where(User.email == login_value)).first()
+
+    is_valid = False
+    if user:
         is_valid = verify_password(form_data.password, user.password_hash)
-        print(f"Password Check: {'VALID' if is_valid else 'INVALID'}")
-    print(f"Password Check: {'VALID' if is_valid else 'INVALID'}")
-        
-    if not user or not verify_password(form_data.password, user.password_hash):
+
+    if not user or not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
         )
     
     print("LOGIN SUCCESS")
@@ -78,6 +126,31 @@ def create_user(user: UserCreate, current_user: User = Depends(get_admin_user), 
     session.refresh(new_user)
     return new_user
 
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
+    user_to_delete = session.get(User, user_id)
+    if not user_to_delete:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Protect critical accounts
+    if user_to_delete.username == 'admin' or user_to_delete.role == 'super_admin':
+        raise HTTPException(status_code=400, detail="Cannot delete admin/super-admin accounts")
+        
+    username = user_to_delete.username
+    
+    # Logic: If user is deleted, we should UNLINK them from orders and payments
+    # (Setting to NULL instead of deleting orders/money)
+    session.exec(text('UPDATE "order" SET constructor_id = NULL WHERE constructor_id = :user_id'), {"user_id": user_id})
+    session.exec(text('UPDATE "order" SET manager_id = NULL WHERE manager_id = :user_id'), {"user_id": user_id})
+    session.exec(text("UPDATE payment SET constructor_id = NULL WHERE constructor_id = :user_id"), {"user_id": user_id})
+    session.exec(text("UPDATE payment SET manager_id = NULL WHERE manager_id = :user_id"), {"user_id": user_id})
+    
+    session.delete(user_to_delete)
+    session.commit()
+    
+    log_activity(session, "DELETE_USER", f"Видалено користувача '{username}' (Видалив: {current_user.username})")
+    return {"message": "User deleted successfully"}
+
 @router.get("/users", response_model=List[UserRead])
 def read_users(current_user: User = Depends(get_manager_user), session: Session = Depends(get_session)):
     users = session.exec(select(User)).all()
@@ -88,9 +161,88 @@ class PaymentCreate(BaseModel):
     amount: float
     date_received: date
     notes: Optional[str] = None
-    notes: Optional[str] = None
     manual_order_id: Optional[int] = None  # Якщо вказано, розподіл на конкретне замовлення
     constructor_id: Optional[int] = None # Якщо вказано, розподіл по замовленнях цього конструктора
+    manager_id: Optional[int] = None # Якщо вказано, розподіл по замовленнях цього менеджера
+
+PAYMENT_SCHEMA_PATCHES = [
+    ("allocated_automatically", "ALTER TABLE payment ADD COLUMN allocated_automatically BOOLEAN DEFAULT TRUE"),
+    ("notes", "ALTER TABLE payment ADD COLUMN notes TEXT"),
+    ("manual_order_id", "ALTER TABLE payment ADD COLUMN manual_order_id INTEGER"),
+    ("constructor_id", "ALTER TABLE payment ADD COLUMN constructor_id INTEGER"),
+    ("manager_id", "ALTER TABLE payment ADD COLUMN manager_id INTEGER"),
+]
+
+ORDER_PLANNING_SCHEMA_PATCHES = [
+    (
+        "constructive_days",
+        (
+            'ALTER TABLE "order" ADD COLUMN constructive_days INTEGER DEFAULT 5',
+            "ALTER TABLE order ADD COLUMN constructive_days INTEGER DEFAULT 5",
+        ),
+    ),
+    (
+        "complectation_days",
+        (
+            'ALTER TABLE "order" ADD COLUMN complectation_days INTEGER DEFAULT 2',
+            "ALTER TABLE order ADD COLUMN complectation_days INTEGER DEFAULT 2",
+        ),
+    ),
+    (
+        "preassembly_days",
+        (
+            'ALTER TABLE "order" ADD COLUMN preassembly_days INTEGER DEFAULT 1',
+            "ALTER TABLE order ADD COLUMN preassembly_days INTEGER DEFAULT 1",
+        ),
+    ),
+    (
+        "installation_days",
+        (
+            'ALTER TABLE "order" ADD COLUMN installation_days INTEGER DEFAULT 3',
+            "ALTER TABLE order ADD COLUMN installation_days INTEGER DEFAULT 3",
+        ),
+    ),
+]
+
+
+def ensure_payment_schema(session: Session):
+    """Hot-fix old databases that miss newer payment columns."""
+    for column_name, alter_sql in PAYMENT_SCHEMA_PATCHES:
+        try:
+            session.exec(text(f"SELECT {column_name} FROM payment LIMIT 1"))
+        except Exception:
+            session.rollback()
+            try:
+                session.connection().execute(text(alter_sql))
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                err = str(e).lower()
+                if "already exists" in err or "duplicate column" in err:
+                    continue
+                raise
+
+
+def ensure_order_planning_schema(session: Session):
+    """Ensure planning columns exist on older databases."""
+    for column_name, alter_sqls in ORDER_PLANNING_SCHEMA_PATCHES:
+        try:
+            session.exec(text(f'SELECT {column_name} FROM "order" LIMIT 1'))
+            continue
+        except Exception:
+            session.rollback()
+
+        for sql in alter_sqls:
+            try:
+                session.connection().execute(text(sql))
+                session.commit()
+                break
+            except Exception as e:
+                session.rollback()
+                err = str(e).lower()
+                if "already exists" in err or "duplicate column" in err:
+                    break
+
 
 def log_activity(session: Session, action_type: str, description: str, details: Optional[str] = None):
     try:
@@ -101,18 +253,48 @@ def log_activity(session: Session, action_type: str, description: str, details: 
         print(f"Failed to log activity: {e}")
 
 @router.get("/fix-db")
-def fix_database_schema(session: Session = Depends(get_session)):
+def fix_database_schema(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
     logs = []
     
     # helper to run command
     def run_sql(sql):
         try:
+            # 💡 SQLite doesn't support 'IF NOT EXISTS' in ALTER TABLE
+            # If we detect it and we are on SQLite, we might need a workaround.
+            # But the simplest is to try with it, and if it fails with syntax, try without.
             session.connection().execute(text(sql))
             session.commit()
             logs.append(f"SUCCESS: {sql}")
         except Exception as e:
             session.rollback()
-            logs.append(f"FAILED: {sql} | Error: {str(e)}")
+            err_msg = str(e).lower()
+            
+            # If it failed because of IF NOT EXISTS syntax (sqlite error)
+            if "if not exists" in sql.lower() and ("syntax error" in err_msg or "near \"exists\"" in err_msg):
+                # Try stripping IF NOT EXISTS
+                cleaned_sql = sql.replace("IF NOT EXISTS ", "").replace("if not exists ", "")
+                try:
+                    session.connection().execute(text(cleaned_sql))
+                    session.commit()
+                    logs.append(f"SUCCESS (cleaned): {cleaned_sql}")
+                    return
+                except Exception as e2:
+                    session.rollback()
+                    err_msg2 = str(e2).lower()
+                    # If it already exists, that's actually success for an "IF NOT EXISTS" intent
+                    if "duplicate column" in err_msg2 or "already exists" in err_msg2:
+                        logs.append(f"SKIPPED (already exists): {cleaned_sql}")
+                        return
+                    logs.append(f"FAILED (cleaned): {cleaned_sql} | Error: {str(e2)}")
+            
+            # If it failed because column already exists (postgres or cleaned sqlite)
+            if "already exists" in err_msg or "duplicate column" in err_msg:
+                logs.append(f"SKIPPED (already exists): {sql}")
+            else:
+                logs.append(f"FAILED: {sql} | Error: {str(e)}")
 
     logs.append("--- STARTING MANUAL MIGRATION (VERSION 3 - QUOTED USER) ---")
     
@@ -132,11 +314,40 @@ def fix_database_schema(session: Session = Depends(get_session)):
     logs.append("Attempting to add date_installation_plan...")
     run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_installation_plan DATE')
     run_sql('ALTER TABLE order ADD COLUMN date_installation_plan DATE')
+
+    # 2b2. Planned Installation Duration (days)
+    logs.append("Attempting to add installation_days...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS installation_days INTEGER DEFAULT 3')
+    run_sql('ALTER TABLE order ADD COLUMN installation_days INTEGER DEFAULT 3')
+
+    # 2b3. Planned stage durations for Gantt pipeline
+    logs.append("Attempting to add constructive/complectation/preassembly days...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS constructive_days INTEGER DEFAULT 5')
+    run_sql('ALTER TABLE order ADD COLUMN constructive_days INTEGER DEFAULT 5')
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS complectation_days INTEGER DEFAULT 2')
+    run_sql('ALTER TABLE order ADD COLUMN complectation_days INTEGER DEFAULT 2')
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS preassembly_days INTEGER DEFAULT 1')
+    run_sql('ALTER TABLE order ADD COLUMN preassembly_days INTEGER DEFAULT 1')
     
     # 2c. Material Cost
     logs.append("Attempting to add material_cost...")
     run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS material_cost FLOAT DEFAULT 0.0')
     run_sql('ALTER TABLE order ADD COLUMN material_cost REAL DEFAULT 0.0')
+    
+    # 2d. Manager ID
+    logs.append("Attempting to add manager_id...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS manager_id INTEGER')
+    run_sql('ALTER TABLE order ADD COLUMN manager_id INTEGER')
+    
+    # 2e. Manager Paid Amount
+    logs.append("Attempting to add manager_paid_amount...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS manager_paid_amount FLOAT DEFAULT 0.0')
+    run_sql('ALTER TABLE order ADD COLUMN manager_paid_amount REAL DEFAULT 0.0')
+    
+    # 2f. Date Manager Paid
+    logs.append("Attempting to add date_manager_paid...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_manager_paid DATE')
+    run_sql('ALTER TABLE order ADD COLUMN date_manager_paid DATE')
     
     # 2d. Fixed Bonus and Custom Stage Percentages
     logs.append("Attempting to add fixed_bonus and custom stage percentages...")
@@ -163,6 +374,9 @@ def fix_database_schema(session: Session = Depends(get_session)):
     
     run_sql('ALTER TABLE payment ADD COLUMN IF NOT EXISTS constructor_id INTEGER REFERENCES "user"(id)')
     run_sql('ALTER TABLE payment ADD COLUMN constructor_id INTEGER')
+    
+    run_sql('ALTER TABLE payment ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES "user"(id)')
+    run_sql('ALTER TABLE payment ADD COLUMN manager_id INTEGER')
 
     # 4. User Columns (card_number, email)
     logs.append("Checking User table columns...")
@@ -174,27 +388,31 @@ def fix_database_schema(session: Session = Depends(get_session)):
         try:
             logs.append(f"Trying table name: {variant}")
             # Use distinct run for each column to avoid one failure blocking others
-            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS card_number VARCHAR'))
-            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS email VARCHAR'))
-            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS phone_number VARCHAR'))
-            session.connection().execute(text(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS telegram_id VARCHAR'))
+            run_sql(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS card_number VARCHAR')
+            run_sql(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS email VARCHAR')
+            run_sql(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS phone_number VARCHAR')
+            run_sql(f'ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS telegram_id VARCHAR')
             
             # Additional User Columns (v1.5)
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS salary_mode VARCHAR DEFAULT 'sales_percent'"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS salary_percent FLOAT DEFAULT 5.0"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage1_percent FLOAT DEFAULT 50.0"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage2_percent FLOAT DEFAULT 50.0"))
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS salary_mode VARCHAR DEFAULT 'sales_percent'")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS salary_percent FLOAT DEFAULT 5.0")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage1_percent FLOAT DEFAULT 50.0")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS payment_stage2_percent FLOAT DEFAULT 50.0")
             
             # Manager permissions (v1.6)
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_constructor_pay BOOLEAN DEFAULT TRUE"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_stage1 BOOLEAN DEFAULT TRUE"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_stage2 BOOLEAN DEFAULT TRUE"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_debt BOOLEAN DEFAULT TRUE"))
-            session.connection().execute(text(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_dashboard BOOLEAN DEFAULT TRUE"))
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_constructor_pay BOOLEAN DEFAULT TRUE")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_stage1 BOOLEAN DEFAULT TRUE")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_stage2 BOOLEAN DEFAULT TRUE")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_debt BOOLEAN DEFAULT TRUE")
+            run_sql(f"ALTER TABLE {variant} ADD COLUMN IF NOT EXISTS can_see_dashboard BOOLEAN DEFAULT TRUE")
             
             session.commit()
-            logs.append(f"SUCCESS with {variant}")
-            break # Stop if one worked
+            logs.append(f"COMPLETED checks for {variant}")
+            # We don't break anymore because run_sql handles errors individually, 
+            # and we want to try other variants if one completely fails (e.g. table not found)
+            # but actually if run_sql works, it means table exists.
+            # Let's check status of the first run_sql
+            break # If we got here without a fatal table error, we are good.
         except Exception as e:
             session.rollback()
             logs.append(f"Failed with {variant}: {str(e)}")
@@ -227,49 +445,77 @@ def fix_database_schema(session: Session = Depends(get_session)):
         # v1.6 Manager Plan
         run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_installation_plan DATE')
         run_sql('ALTER TABLE order ADD COLUMN date_installation_plan DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS constructive_days INTEGER DEFAULT 5')
+        run_sql('ALTER TABLE order ADD COLUMN constructive_days INTEGER DEFAULT 5')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS complectation_days INTEGER DEFAULT 2')
+        run_sql('ALTER TABLE order ADD COLUMN complectation_days INTEGER DEFAULT 2')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS preassembly_days INTEGER DEFAULT 1')
+        run_sql('ALTER TABLE order ADD COLUMN preassembly_days INTEGER DEFAULT 1')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS installation_days INTEGER DEFAULT 3')
+        run_sql('ALTER TABLE order ADD COLUMN installation_days INTEGER DEFAULT 3')
     except:
         pass
 
-    # 6. Create Default Admin if missing
-    logs.append("Checking for admin user...")
+    # 6. Create Default Super Admin if missing
+    logs.append("Checking for super-admin user...")
     try:
         admin_exists = session.exec(select(User).where(User.username == "admin")).first()
         if not admin_exists:
             from auth import get_password_hash
+            default_admin_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", "admin")
             # User is already imported globally
-            logs.append("Admin not found. Creating default admin...")
+            logs.append("Admin not found. Creating default super-admin...")
             admin_user = User(
                 username="admin",
-                password_hash=get_password_hash("admin"),
-                full_name="Administrator",
-                role="admin"
+                password_hash=get_password_hash(default_admin_password),
+                full_name="Super Administrator",
+                role="super_admin"
             )
             session.add(admin_user)
             session.commit()
-            logs.append("SUCCESS: Created admin / admin")
+            logs.append("SUCCESS: Created default super-admin user")
         else:
-            logs.append("Admin already exists.")
+            if admin_exists.role != "super_admin":
+                admin_exists.role = "super_admin"
+                session.add(admin_exists)
+                session.commit()
+                logs.append("SUCCESS: Promoted existing 'admin' user to super_admin.")
+            else:
+                logs.append("Super-admin already exists.")
     except Exception as e:
-        logs.append(f"FAILED to check/create admin: {str(e)}")
+        logs.append(f"FAILED to check/create super-admin: {str(e)}")
         session.rollback()
 
     return {"status": "completed", "logs": logs}
 
 @router.get("/logs", response_model=List[ActivityLogRead])
-def get_logs(session: Session = Depends(get_session)):
+def get_logs(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     return session.exec(select(ActivityLog).order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())).all()
 
 @router.post("/orders/", response_model=OrderRead)
 def create_order(order: OrderCreate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
     try:
+        ensure_order_planning_schema(session)
+
         # Create DB model from input
         db_order = Order.from_orm(order)
+        db_order.constructive_days = max(1, min(60, int(db_order.constructive_days or 5)))
+        db_order.complectation_days = max(1, min(60, int(db_order.complectation_days or 2)))
+        db_order.preassembly_days = max(1, min(60, int(db_order.preassembly_days or 1)))
+        db_order.installation_days = max(1, min(60, int(db_order.installation_days or 3)))
         
         # Logic:
         # - Admin/Manager can assign anyone (via input)
         # - Constructor is forced to assign themselves
         if current_user.role == 'constructor':
             db_order.constructor_id = current_user.id
+            db_order.manager_id = None
+            db_order.fixed_bonus = None
+            db_order.custom_stage1_percent = None
+            db_order.custom_stage2_percent = None
             
         session.add(db_order)
         session.commit()
@@ -302,7 +548,7 @@ def create_order(order: OrderCreate, session: Session = Depends(get_session), cu
             session.commit()
             session.refresh(db_order)
 
-        return OrderRead.from_order(db_order, constructor)
+        return OrderRead.from_order(db_order, session)
     except Exception as e:
         session.rollback()
         print(f"ERROR CREATING ORDER: {e}")
@@ -321,11 +567,13 @@ def read_orders(
     current_user: User = Depends(get_current_user)
 ):
     try:
+        ensure_order_planning_schema(session)
+
         query = select(Order)
         
         # FILTER BY ROLE
         # Admin and Manager see ALL orders
-        if current_user.role not in ['admin', 'manager']:
+        if current_user.role not in MANAGER_ROLES:
             print(f"Filtering orders for CONST ID: {current_user.id}")
             # Constructor sees only their assigned orders
             query = query.where(Order.constructor_id == current_user.id)
@@ -363,7 +611,7 @@ def read_orders(
                     .execution_options(populate_existing=True)
                 ).first()
             
-            result.append(OrderRead.from_order(o, constructor))
+            result.append(OrderRead.from_order(o, session))
         return result
     except Exception as e:
         print(f"ERROR READING ORDERS: {e}")
@@ -397,31 +645,253 @@ def update_user(
     log_activity(session, "UPDATE_USER", f"Оновлено профіль {db_user.username} (Адмін: {current_user.username})")
     return db_user
 
-@router.delete("/users/{user_id}")
-def delete_user(
-    user_id: int, 
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user) # Only admin can delete
-):
-    user = session.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user.username == "admin":
-         raise HTTPException(status_code=400, detail="Cannot delete superadmin")
-         
-    session.delete(user)
-    session.commit()
-    log_activity(session, "DELETE_USER", f"Видалено користувача {user.username} (Адмін: {current_user.username})")
-    return {"ok": True}
+
 
 
 @router.get("/orders/{order_id}", response_model=OrderRead)
-def read_order(order_id: int, session: Session = Depends(get_session)):
+def read_order(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    ensure_order_planning_schema(session)
+
     order = session.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, order)
+    return OrderRead.from_order(order, session)
+
+
+@router.get("/orders/{order_id}/calculation-history", response_model=List[OrderCalculationHistoryItemRead])
+def get_order_calculation_history(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    order = session.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, order)
+
     constructor = session.get(User, order.constructor_id) if order.constructor_id else None
-    return OrderRead.from_order(order, constructor)
+    manager = session.get(User, order.manager_id) if order.manager_id else None
+    base_financials = resolve_constructor_base_financials(order, session=session, constructor=constructor)
+
+    deductions = session.exec(
+        select(Deduction)
+        .where(Deduction.order_id == order.id)
+        .order_by(Deduction.date_created.asc(), Deduction.id.asc())
+    ).all()
+
+    allocations = session.exec(
+        select(PaymentAllocation)
+        .where(PaymentAllocation.order_id == order.id)
+        .order_by(PaymentAllocation.created_at.asc(), PaymentAllocation.id.asc())
+    ).all()
+
+    payment_ids = list({alloc.payment_id for alloc in allocations})
+    payments_by_id = {}
+    if payment_ids:
+        payments = session.exec(select(Payment).where(Payment.id.in_(payment_ids))).all()
+        payments_by_id = {payment.id: payment for payment in payments}
+
+    events = []
+
+    def add_event(event_date, priority, event_type, title, description, amount=0.0, stage=None, extra=None):
+        events.append({
+            "date": event_date,
+            "priority": priority,
+            "event_type": event_type,
+            "title": title,
+            "description": description,
+            "amount": amount,
+            "stage": stage,
+            "extra": extra or {},
+        })
+
+    stage1_label = f"Етап I ({base_financials['stage1_percent']:.0f}%)"
+    stage2_label = f"Етап II ({base_financials['stage2_percent']:.0f}%)"
+
+    creation_description_parts = [
+        f"Ціна замовлення: {order.price:,.2f} грн".replace(",", " "),
+        f"ПГ конструктора: {base_financials['bonus']:,.2f} грн".replace(",", " "),
+        f"{stage1_label}: {base_financials['raw_advance_amount']:,.2f} грн".replace(",", " "),
+        f"{stage2_label}: {base_financials['raw_final_amount']:,.2f} грн".replace(",", " "),
+    ]
+    if manager and getattr(order, "manager_bonus", None):
+        creation_description_parts.append(f"Менеджерська премія: {order.manager_bonus:,.2f} грн".replace(",", " "))
+
+    add_event(
+        order.date_received,
+        0,
+        "created",
+        "Сформовано початковий розрахунок",
+        " | ".join(creation_description_parts),
+        amount=base_financials["bonus"],
+    )
+
+    if constructor:
+        constructor_name = constructor.full_name or constructor.username
+        add_event(
+            order.date_received,
+            5,
+            "constructor_assigned",
+            "Замовлення передано конструктору",
+            f"Відповідальний конструктор: {constructor_name}. Від цієї точки починається маршрут замовлення.",
+            amount=base_financials["bonus"],
+        )
+
+    if order.date_to_work:
+        add_event(
+            order.date_to_work,
+            10,
+            "stage_started",
+            "Конструктор віддав замовлення в роботу",
+            f"Активувався {stage1_label}. Після цієї дати борг по першому етапу стає активним.",
+            amount=base_financials["raw_advance_amount"],
+            stage="advance",
+        )
+
+    if order.date_installation:
+        add_event(
+            order.date_installation,
+            20,
+            "installation_completed",
+            "Монтаж виконано",
+            f"Зафіксовано завершення монтажу. Активувався {stage2_label}.",
+            amount=base_financials["raw_final_amount"],
+            stage="final",
+        )
+
+    for deduction in deductions:
+        add_event(
+            deduction.date_created,
+            30,
+            "deduction_added",
+            "Додано штраф",
+            f"{deduction.description}. Штраф зменшує невиплачену суму по замовленню.",
+            amount=deduction.amount,
+            stage="deduction",
+            extra={"deduction_id": deduction.id},
+        )
+        if deduction.is_paid and deduction.date_paid:
+            add_event(
+                deduction.date_paid,
+                31,
+                "deduction_paid",
+                "Штраф погашено",
+                f"Штраф '{deduction.description}' більше не зменшує борг по замовленню.",
+                amount=deduction.amount,
+                stage="deduction",
+                extra={"deduction_id": deduction.id},
+            )
+
+    for allocation in allocations:
+        payment = payments_by_id.get(allocation.payment_id)
+        allocation_date = payment.date_received if payment else allocation.created_at.date()
+        stage_title = "Етап I" if allocation.stage == "advance" else "Етап II"
+        distribution_mode = "ручний" if payment and payment.manual_order_id == order.id else "авто"
+        notes_text = f" Примітка: {payment.notes}." if payment and payment.notes else ""
+        add_event(
+            allocation_date,
+            40,
+            "payment_allocation",
+            f"Надійшла виплата на {stage_title}",
+            f"Розподілено {allocation.amount:,.2f} грн ({distribution_mode}) на {stage_title.lower()}.{notes_text}".replace(",", " "),
+            amount=allocation.amount,
+            stage=allocation.stage,
+            extra={"payment_id": allocation.payment_id},
+        )
+
+    final_snapshot_preview = build_constructor_financial_snapshot(
+        raw_advance_amount=base_financials["raw_advance_amount"],
+        raw_final_amount=base_financials["raw_final_amount"],
+        advance_paid_amount=order.advance_paid_amount or 0.0,
+        final_paid_amount=order.final_paid_amount or 0.0,
+        unpaid_deductions=sum(d.amount for d in deductions if not d.is_paid),
+        stage1_active=bool(order.date_to_work),
+        stage2_active=bool(order.date_installation),
+    )
+
+    if order.date_installation and final_snapshot_preview["remainder_amount"] <= 0.01:
+        add_event(
+            order.date_final_paid or order.date_installation,
+            90,
+            "order_closed",
+            "Замовлення закрито",
+            "Усі активні етапи закриті, борг відсутній. Замовлення можна вважати завершеним і переносити в архів.",
+            amount=0.0,
+        )
+
+    events.sort(
+        key=lambda event: (
+            event["date"] or date.min,
+            event["priority"],
+            event["extra"].get("payment_id", 0),
+            event["extra"].get("deduction_id", 0),
+        )
+    )
+
+    state = {
+        "advance_paid_amount": 0.0,
+        "final_paid_amount": 0.0,
+        "unpaid_deductions": 0.0,
+        "stage1_active": False,
+        "stage2_active": False,
+    }
+    result = []
+
+    for event in events:
+        if event["event_type"] == "stage_started":
+            if event["stage"] == "advance":
+                state["stage1_active"] = True
+            elif event["stage"] == "final":
+                state["stage2_active"] = True
+        elif event["event_type"] == "deduction_added":
+            state["unpaid_deductions"] += event["amount"]
+        elif event["event_type"] == "deduction_paid":
+            state["unpaid_deductions"] = max(0.0, state["unpaid_deductions"] - event["amount"])
+        elif event["event_type"] == "payment_allocation":
+            if event["stage"] == "advance":
+                state["advance_paid_amount"] += event["amount"]
+            elif event["stage"] == "final":
+                state["final_paid_amount"] += event["amount"]
+
+        snapshot = build_constructor_financial_snapshot(
+            raw_advance_amount=base_financials["raw_advance_amount"],
+            raw_final_amount=base_financials["raw_final_amount"],
+            advance_paid_amount=state["advance_paid_amount"],
+            final_paid_amount=state["final_paid_amount"],
+            unpaid_deductions=state["unpaid_deductions"],
+            stage1_active=state["stage1_active"],
+            stage2_active=state["stage2_active"],
+        )
+
+        result.append(
+            OrderCalculationHistoryItemRead(
+                event_date=event["date"],
+                event_type=event["event_type"],
+                title=event["title"],
+                description=event["description"],
+                amount=event["amount"],
+                stage=event["stage"],
+                snapshot={
+                    "bonus": base_financials["bonus"],
+                    "advance_amount": snapshot["advance_amount"],
+                    "final_amount": snapshot["final_amount"],
+                    "advance_paid_amount": snapshot["advance_paid_amount"],
+                    "final_paid_amount": snapshot["final_paid_amount"],
+                    "advance_remaining": snapshot["advance_remaining"],
+                    "final_remaining": snapshot["final_remaining"],
+                    "current_debt": snapshot["current_debt"],
+                    "remainder_amount": snapshot["remainder_amount"],
+                    "unpaid_deductions": snapshot["unpaid_deductions"],
+                },
+            )
+        )
+
+    return result
 
 @router.patch("/orders/{order_id}", response_model=OrderRead)
 def update_order(
@@ -430,28 +900,64 @@ def update_order(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    ensure_order_planning_schema(session)
+
     db_order = session.get(Order, order_id)
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, db_order)
     
     # Track if dates changed
     old_date_to_work = db_order.date_to_work
     old_date_installation = db_order.date_installation
     
     order_data = order_update.dict(exclude_unset=True)
+
+    stage_days_fields = ("constructive_days", "complectation_days", "preassembly_days", "installation_days")
+    for field in stage_days_fields:
+        if field in order_data and order_data[field] is not None:
+            try:
+                order_data[field] = max(1, min(60, int(order_data[field])))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid value for {field}")
+
+    if current_user.role == "constructor":
+        restricted_fields = {
+            "id",
+            "price",
+            "material_cost",
+            "fixed_bonus",
+            "custom_stage1_percent",
+            "custom_stage2_percent",
+            "constructor_id",
+            "manager_id",
+            "advance_paid_amount",
+            "final_paid_amount",
+            "manager_paid_amount",
+            "date_advance_paid",
+            "date_final_paid",
+            "date_manager_paid",
+            "constructive_days",
+            "complectation_days",
+            "preassembly_days",
+            "installation_days",
+        }
+        for field in restricted_fields:
+            if field in order_data:
+                del order_data[field]
     
     # PERMISSION CHECK:
     # Only Admin/Manager can change constructor_id
     if "constructor_id" in order_data:
-        if current_user.role not in ['admin', 'manager']:
+        if current_user.role not in MANAGER_ROLES:
             # Silent ignore or error? Let's ignore to prevent frontend crashes if it sends it inadvertently
             del order_data["constructor_id"]
     
     # Check if ID change is requested
     new_id = order_data.get("id")
     if new_id is not None and new_id != order_id:
-        if current_user.role != 'admin': # Only Admin changes IDs
-             raise HTTPException(status_code=403, detail="Only Admin can change Order IDs")
+        if not is_admin(current_user):  # Only admin/super_admin changes IDs
+            raise HTTPException(status_code=403, detail="Only Admin can change Order IDs")
 
         # Check if new ID exists
         existing = session.get(Order, new_id)
@@ -461,9 +967,9 @@ def update_order(
         
         # We need to use raw SQL to update PK and cascade to deductions
         from sqlalchemy import text
-        session.exec(text(f"UPDATE deduction SET order_id = {new_id} WHERE order_id = {order_id}")) # deductions first
-        session.exec(text(f"UPDATE order_file SET order_id = {new_id} WHERE order_id = {order_id}")) # files too
-        session.exec(text(f"UPDATE \"order\" SET id = {new_id} WHERE id = {order_id}")) # Quote table name 'order'
+        session.exec(text("UPDATE deduction SET order_id = :new_id WHERE order_id = :order_id"), {"new_id": new_id, "order_id": order_id}) # deductions first
+        session.exec(text("UPDATE order_file SET order_id = :new_id WHERE order_id = :order_id"), {"new_id": new_id, "order_id": order_id}) # files too
+        session.exec(text('UPDATE "order" SET id = :new_id WHERE id = :order_id'), {"new_id": new_id, "order_id": order_id}) # Quote table name 'order'
         session.commit()
         
         # Re-fetch new order
@@ -507,10 +1013,14 @@ def update_order(
     log_activity(session, "UPDATE_ORDER", f"Оновлено замовлення #{order_id} (Користувач: {current_user.username})")
     
     constructor = session.get(User, db_order.constructor_id) if db_order.constructor_id else None
-    return OrderRead.from_order(db_order, constructor)
+    return OrderRead.from_order(db_order, session)
 
 @router.delete("/orders/{order_id}")
-def delete_order(order_id: int, session: Session = Depends(get_session)):
+def delete_order(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
     db_order = session.get(Order, order_id)
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -520,12 +1030,12 @@ def delete_order(order_id: int, session: Session = Depends(get_session)):
     # Manually delete orphans just in case
     from sqlalchemy import text
     try:
-        session.exec(text(f"DELETE FROM deduction WHERE order_id = {order_id}")) # Fines
-        session.exec(text(f"DELETE FROM paymentallocation WHERE order_id = {order_id}")) # Allocations
-        session.exec(text(f"DELETE FROM orderfile WHERE order_id = {order_id}")) # Files
+        session.exec(text("DELETE FROM deduction WHERE order_id = :order_id"), {"order_id": order_id}) # Fines
+        session.exec(text("DELETE FROM paymentallocation WHERE order_id = :order_id"), {"order_id": order_id}) # Allocations
+        session.exec(text("DELETE FROM orderfile WHERE order_id = :order_id"), {"order_id": order_id}) # Files
         
         # Unlink manual payments (don't delete the money, just unlink order)
-        session.exec(text(f"UPDATE payment SET manual_order_id = NULL WHERE manual_order_id = {order_id}"))
+        session.exec(text("UPDATE payment SET manual_order_id = NULL WHERE manual_order_id = :order_id"), {"order_id": order_id})
         session.commit()
     except Exception as e:
         print(f"Error cleaning up order dependencies: {e}")
@@ -538,16 +1048,23 @@ def delete_order(order_id: int, session: Session = Depends(get_session)):
 
 # Payment endpoints
 @router.post("/payments/")
-def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_session)):
+def create_payment(
+    payment_data: PaymentCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
     """Додати платіж і автоматично розподілити його"""
     try:
+        ensure_payment_schema(session)
+
         payment = Payment(
             amount=payment_data.amount,
             date_received=payment_data.date_received,
             notes=payment_data.notes,
             allocated_automatically=payment_data.manual_order_id is None,
             manual_order_id=payment_data.manual_order_id,
-            constructor_id=payment_data.constructor_id
+            constructor_id=payment_data.constructor_id,
+            manager_id=payment_data.manager_id
         )
         session.add(payment)
         session.commit()
@@ -590,7 +1107,11 @@ def create_payment(payment_data: PaymentCreate, session: Session = Depends(get_s
         raise HTTPException(status_code=500, detail=f"Payment Error: {str(e)}")
 
 @router.delete("/payments/{payment_id}")
-def delete_payment(payment_id: int, session: Session = Depends(get_session)):
+def delete_payment(
+    payment_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
     """
     Видалити платіж і ПОВНІСТЮ перерахувати всі розподіли.
     Це необхідно для збереження коректності балансів (First-In-First-Out).
@@ -601,9 +1122,6 @@ def delete_payment(payment_id: int, session: Session = Depends(get_session)):
     
     amount = payment.amount
     date_ = payment.date_received
-    
-    session.delete(payment)
-    session.commit()
     
     # --- TARGETED UNDO STRATEGY ---
     # Instead of resetting everything, we only undo THIS payment's effect.
@@ -619,10 +1137,9 @@ def delete_payment(payment_id: int, session: Session = Depends(get_session)):
         if not order:
             continue
             
-        # Calculate totals to check if we need to remove "Paid" date
-        bonus = order.price * 0.05
-        advance_required = bonus * 0.5
-        final_required = bonus * 0.5
+        # Use fine-adjusted calculation for accurate required amounts
+        from payment_service import PaymentDistributionService
+        _, advance_required, final_required, _ = PaymentDistributionService._calculate_financials(order, session)
         
         # Revert amounts
         if alloc.stage == 'advance':
@@ -652,14 +1169,49 @@ def delete_payment(payment_id: int, session: Session = Depends(get_session)):
     return {"ok": True}
 
 @router.get("/payments/", response_model=List[PaymentRead])
-def get_payments(session: Session = Depends(get_session)):
+def get_payments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     """Отримати історію всіх платежів"""
     payments = session.exec(select(Payment).order_by(Payment.date_received.desc())).all()
-    return payments
+    
+    result = []
+    for p in payments:
+        if current_user.role == "constructor" and not is_payment_visible_to_constructor(session, p, current_user.id):
+            continue
+
+        p_read = PaymentRead.from_orm(p)
+        
+        # Resolve person name
+        uid = p.constructor_id or p.manager_id
+        if uid:
+            user = session.get(User, uid)
+            if user:
+                p_read.person_name = user.full_name or user.username
+            else:
+                p_read.person_name = "Видалений користувач"
+        else:
+            p_read.person_name = "Загальний (нерозподілений)"
+            
+        result.append(p_read)
+        
+    return result
 
 @router.get("/payments/{payment_id}/allocations")
-def get_payment_allocations(payment_id: int, session: Session = Depends(get_session)):
+def get_payment_allocations(
+    payment_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     """Отримати розподіл конкретного платежу"""
+    payment = session.get(Payment, payment_id)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    if current_user.role == "constructor" and not is_payment_visible_to_constructor(session, payment, current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied for this payment")
+
     allocations = session.exec(
         select(PaymentAllocation).where(PaymentAllocation.payment_id == payment_id)
     ).all()
@@ -670,14 +1222,17 @@ def get_payment_allocations(payment_id: int, session: Session = Depends(get_sess
         result.append({
             "order_id": alloc.order_id,
             "order_name": order.name if order else "Unknown",
-            "stage": "Аванс" if alloc.stage == "advance" else "Фінальна оплата",
+            "stage": alloc.stage,
             "amount": alloc.amount
         })
     
     return result
 
 @router.post("/payments/redistribute")
-def redistribute_payments(session: Session = Depends(get_session)):
+def redistribute_payments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
     """Примусово перерозподілити всі наявні платежі"""
     allocations = PaymentDistributionService.distribute_all_unallocated(session)
     
@@ -698,23 +1253,93 @@ def redistribute_payments(session: Session = Depends(get_session)):
         "message": f"Розподіл завершено. Нерозподілено: {unallocated:.2f} грн"
     }
 
+
+def reconcile_order_allocations_after_financial_change(order: Order, session: Session):
+    """
+    Recalculate payout requirements after changing deductions.
+
+    If the order became overpaid, free the latest allocations for this order.
+    Then run a redistribution pass so released money can close other debts or,
+    after deleting a deduction, return to this order if unallocated funds exist.
+    """
+    _, new_advance_needed, new_final_needed, _ = PaymentDistributionService._calculate_financials(order, session)
+
+    advance_overpaid = max(0, order.advance_paid_amount - new_advance_needed)
+    final_overpaid = max(0, order.final_paid_amount - new_final_needed)
+
+    if advance_overpaid > 0.01:
+        order.advance_paid_amount = new_advance_needed
+        if new_advance_needed < 0.01:
+            order.date_advance_paid = None
+
+    if final_overpaid > 0.01:
+        order.final_paid_amount = new_final_needed
+        if new_final_needed < 0.01:
+            order.date_final_paid = None
+
+    if advance_overpaid > 0.01 or final_overpaid > 0.01:
+        session.add(order)
+
+        total_to_free = advance_overpaid + final_overpaid
+        allocations = session.exec(
+            select(PaymentAllocation)
+            .where(PaymentAllocation.order_id == order.id)
+            .order_by(PaymentAllocation.id.desc())
+        ).all()
+
+        for alloc in allocations:
+            if total_to_free <= 0.01:
+                break
+
+            if alloc.amount <= total_to_free:
+                total_to_free -= alloc.amount
+                session.delete(alloc)
+            else:
+                alloc.amount -= total_to_free
+                session.add(alloc)
+                total_to_free = 0
+
+        session.commit()
+
+    PaymentDistributionService.distribute_all_unallocated(session)
+    session.refresh(order)
+
 # File Management
 # File Link Management
 @router.get("/orders/{order_id}/files", response_model=List[OrderFileRead])
-def get_order_files(order_id: int, session: Session = Depends(get_session)):
-    return session.exec(select(OrderFile).where(OrderFile.order_id == order_id)).all()
-
-@router.post("/orders/{order_id}/files", response_model=OrderFileRead)
-def add_file_link(order_id: int, file_data: OrderFileCreate, session: Session = Depends(get_session)):
+def get_order_files(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     order = session.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, order)
+    return session.exec(select(OrderFile).where(OrderFile.order_id == order_id)).all()
+
+@router.post("/orders/{order_id}/files", response_model=OrderFileRead)
+def add_file_link(
+    order_id: int,
+    file_data: OrderFileCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    order = session.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, order)
+
+    try:
+        folder_name = normalize_folder_category(file_data.folder_name)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid folder category")
         
     new_file = OrderFile(
         order_id=order_id,
         name=file_data.name,
         url=file_data.url,
-        folder_name=file_data.folder_name
+        folder_name=folder_name
     )
     session.add(new_file)
     session.commit()
@@ -726,12 +1351,18 @@ def add_file_link(order_id: int, file_data: OrderFileCreate, session: Session = 
     return new_file
 
 @router.delete("/files/{file_id}")
-def delete_file_link(file_id: int, session: Session = Depends(get_session)):
+def delete_file_link(
+    file_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     file_link = session.get(OrderFile, file_id)
     if not file_link:
         raise HTTPException(status_code=404, detail="File link not found")
         
     order = session.get(Order, file_link.order_id)
+    if order:
+        ensure_order_access(current_user, order)
     order_name = order.name if order else "Unknown"
     file_name = file_link.name
     
@@ -748,7 +1379,11 @@ def delete_file_link(file_id: int, session: Session = Depends(get_session)):
 
 # Deduction endpoints
 @router.post("/deductions/")
-def create_deduction(deduction_data: DeductionCreate, session: Session = Depends(get_session)):
+def create_deduction(
+    deduction_data: DeductionCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_manager_user)
+):
     # Verify order exists
     order = session.get(Order, deduction_data.order_id)
     if not order:
@@ -760,6 +1395,11 @@ def create_deduction(deduction_data: DeductionCreate, session: Session = Depends
     session.refresh(deduction)
     
     order = session.get(Order, deduction.order_id)
+
+    try:
+        reconcile_order_allocations_after_financial_change(order, session)
+    except Exception as e:
+        print(f"Warning: recalculation after fine failed: {e}")
     
     # Notify Constructor about Fine
     if order.constructor_id:
@@ -774,13 +1414,32 @@ def create_deduction(deduction_data: DeductionCreate, session: Session = Depends
     return DeductionRead.from_deduction(deduction, order.name)
 
 @router.get("/deductions/")
-def get_deductions(order_id: int = None, session: Session = Depends(get_session)):
+def get_deductions(
+    order_id: int = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     if order_id:
+        order = session.get(Order, order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        ensure_order_access(current_user, order)
         deductions = session.exec(
             select(Deduction).where(Deduction.order_id == order_id)
         ).all()
     else:
-        deductions = session.exec(select(Deduction)).all()
+        if current_user.role in MANAGER_ROLES:
+            deductions = session.exec(select(Deduction)).all()
+        else:
+            own_order_ids = session.exec(
+                select(Order.id).where(Order.constructor_id == current_user.id)
+            ).all()
+            if own_order_ids:
+                deductions = session.exec(
+                    select(Deduction).where(Deduction.order_id.in_(own_order_ids))
+                ).all()
+            else:
+                deductions = []
     
     result = []
     for ded in deductions:
@@ -790,7 +1449,12 @@ def get_deductions(order_id: int = None, session: Session = Depends(get_session)
     return result
 
 @router.patch("/deductions/{deduction_id}")
-def update_deduction(deduction_id: int, deduction_update: "DeductionUpdate", session: Session = Depends(get_session)):
+def update_deduction(
+    deduction_id: int,
+    deduction_update: "DeductionUpdate",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_manager_user)
+):
     from models import DeductionUpdate
     
     deduction = session.get(Deduction, deduction_id)
@@ -806,18 +1470,34 @@ def update_deduction(deduction_id: int, deduction_update: "DeductionUpdate", ses
     session.refresh(deduction)
     
     order = session.get(Order, deduction.order_id)
+    if order:
+        try:
+            reconcile_order_allocations_after_financial_change(order, session)
+        except Exception as e:
+            print(f"Warning: recalculation after deduction update failed: {e}")
     log_activity(session, "UPDATE_DEDUCTION", f"Оновлено штраф #{deduction_id}")
     return DeductionRead.from_deduction(deduction, order.name if order else "Unknown")
 
 @router.delete("/deductions/{deduction_id}")
-def delete_deduction(deduction_id: int, session: Session = Depends(get_session)):
+def delete_deduction(
+    deduction_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_manager_user)
+):
     deduction = session.get(Deduction, deduction_id)
     if not deduction:
         raise HTTPException(status_code=404, detail="Deduction not found")
     
+    order = session.get(Order, deduction.order_id)
     deduction_amount = deduction.amount # Save for log
     session.delete(deduction)
     session.commit()
+
+    if order:
+        try:
+            reconcile_order_allocations_after_financial_change(order, session)
+        except Exception as e:
+            print(f"Warning: recalculation after deduction delete failed: {e}")
     
     log_activity(session, "DELETE_DEDUCTION", f"Видалено штраф #{deduction_id} ({deduction_amount} грн)")
     return {"message": "Deduction deleted successfully"}
@@ -849,9 +1529,24 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
         # Calculate Global Total Debt (Sum of all constructor net debts)
         # We need to iterate all constructors first
         
-        # Per-Constructor Stats
+        # Per-User Stats
         constructors_stats = []
-        constructors = session.exec(select(User).where(User.role == 'constructor')).all()
+        manager_stats = []
+        
+        # Pull all users who could be constructors or managers
+        all_users = session.exec(select(User)).all()
+        
+        # Helper to check activity
+        def has_constructor_activity(u_id):
+            return session.exec(select(Order).where(Order.constructor_id == u_id)).first() is not None or \
+                   session.exec(select(Payment).where(Payment.constructor_id == u_id)).first() is not None
+
+        def has_manager_activity(u_id):
+            return session.exec(select(Order).where(Order.manager_id == u_id)).first() is not None or \
+                   session.exec(select(Payment).where(Payment.manager_id == u_id)).first() is not None
+
+        constructors = [u for u in all_users if u.role == 'constructor' or has_constructor_activity(u.id)]
+        managers = [u for u in all_users if u.role == 'manager' or has_manager_activity(u.id)]
         
         global_total_debt = 0.0
         
@@ -877,76 +1572,10 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             c_debt = 0.0
             
             for o in c_orders:
-                # Calculate bonus using same logic as OrderRead.from_order
-                if o.fixed_bonus is not None:
-                    # Manager override: use exact fixed amount
-                    bonus = o.fixed_bonus
-                elif c and hasattr(c, 'salary_mode') and hasattr(c, 'salary_percent'):
-                    # Calculate based on constructor's salary configuration
-                    if c.salary_mode == 'fixed_amount':
-                        # Fixed amount per order
-                        bonus = c.salary_percent
-                    elif c.salary_mode == 'materials_percent':
-                        # Calculate from material cost
-                        bonus = (o.material_cost or 0) * (c.salary_percent / 100)
-                    else:
-                        # Default: calculate from sales price (sales_percent)
-                        bonus = o.price * (c.salary_percent / 100)
-                else:
-                    # Fallback to old logic (5% of sales price)
-                    bonus = o.price * 0.05
-                
-                # Determine stage distribution percentages
-                if o.custom_stage1_percent is not None:
-                    # Per-order override
-                    stage1_pct = o.custom_stage1_percent
-                    stage2_pct = o.custom_stage2_percent if o.custom_stage2_percent is not None else (100 - stage1_pct)
-                elif c and hasattr(c, 'payment_stage1_percent'):
-                    # Use constructor's default stage distribution
-                    stage1_pct = c.payment_stage1_percent
-                    stage2_pct = c.payment_stage2_percent
-                else:
-                    # Fallback: 50/50
-                    stage1_pct = 50.0
-                    stage2_pct = 50.0
-                
-                # Calculate stage amounts
-                advance_amount = bonus * (stage1_pct / 100)
-                final_amount = bonus * (stage2_pct / 100)
-                
-                advance_remaining = max(0, advance_amount - o.advance_paid_amount)
-                final_remaining = max(0, final_amount - o.final_paid_amount)
-                
-                order_current_debt = 0.0
-                if o.date_to_work and advance_remaining > 0.01:
-                     order_current_debt += advance_remaining
-                if o.date_installation and final_remaining > 0.01:
-                     order_current_debt += final_remaining
-                
-                # Deduct unpaid fines
-                unpaid_fines = session.exec(
-                    select(func.sum(Deduction.amount))
-                    .where(Deduction.order_id == o.id)
-                    .where(Deduction.is_paid == False)
-                ).one() or 0.0
-                
-                # Net debt for this order (salary - fines)
-                # Allow NEGATIVE debt (User owes company) to subtract from total
-                # Previously: max(0, ...)
-                c_debt += (order_current_debt - unpaid_fines)
+                order_view = OrderRead.from_order(o, session)
+                c_debt += order_view.current_debt
 
-            # Add to global sum (only if positive? No, net it out!)
-            # Actually, "Total Debt" usually implies "How much WE have to pay out".
-            # If a constructor has negative debt (owes us), it reduces our valid liability?
-            # Or should it be treated as 0 liablity and separate Receivable?
-            # User expectation seems to be simpler NET math.
-            global_total_debt += max(0, c_debt) # Global debt is what WE OWE. If he owes us, we owe 0.
-            
-            # LOGIC CHANGE: If constructor owes money (negative debt), 
-            # move that amount to "Unallocated" (Вільні) and set debt to 0.
-            if c_debt < 0:
-                c_unallocated += abs(c_debt)
-                c_debt = 0.0
+            global_total_debt += c_debt
 
             constructors_stats.append({
                 "id": c.id,
@@ -954,14 +1583,50 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
                 "unallocated": c_unallocated,
                 "debt": c_debt 
             })
+        # Global Manager Stats
+        total_manager_bonus = 0.0
+        total_manager_paid = 0.0
         
+        for m in managers:
+            m_orders = session.exec(select(Order).where(Order.manager_id == m.id)).all()
+            m_bonus_total = 0.0
+            m_paid_total = 0.0
+            
+            for o in m_orders:
+                # Logic from OrderRead
+                if m and hasattr(m, 'salary_mode') and hasattr(m, 'salary_percent'):
+                    if m.salary_mode == 'fixed_amount':
+                        ob = m.salary_percent
+                    elif m.salary_mode == 'materials_percent':
+                        ob = (o.price - (o.material_cost or 0)) * (m.salary_percent / 100)
+                    else:
+                        ob = o.price * (m.salary_percent / 100)
+                else:
+                    ob = (o.price - (o.material_cost or 0)) * 0.03
+                
+                m_bonus_total += ob
+                m_paid_total += (o.manager_paid_amount or 0)
+            
+            m_debt = max(0, m_bonus_total - m_paid_total)
+            manager_stats.append({
+                "id": m.id,
+                "name": m.full_name or m.username,
+                "bonus": m_bonus_total,
+                "paid": m_paid_total,
+                "debt": m_debt
+            })
+            total_manager_bonus += m_bonus_total
+            total_manager_paid += m_paid_total
+
         return {
             "total_received": total_received,
             "total_allocated": total_allocated,
             "unallocated": unallocated,
             "total_deductions": total_deductions,
-            "total_debt": global_total_debt, # New field for frontend
-            "constructors_stats": constructors_stats
+            "total_debt": global_total_debt,
+            "total_manager_debt": total_manager_bonus - total_manager_paid,
+            "constructors_stats": constructors_stats,
+            "manager_stats": manager_stats
         }
 
     except Exception as e:
@@ -976,8 +1641,16 @@ class ResetRequest(BaseModel):
     password: str
 
 @router.delete("/admin/reset")
-def reset_database(request: ResetRequest, session: Session = Depends(get_session)):
-    if request.password != "Gjksyrf":
+def reset_database(
+    request: ResetRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_super_admin_user)
+):
+    expected_password = os.environ.get("ADMIN_RESET_PASSWORD")
+    if not expected_password:
+        raise HTTPException(status_code=503, detail="Database reset is disabled")
+
+    if request.password != expected_password:
         raise HTTPException(status_code=403, detail="Incorrect password")
     
     # Delete all data from tables in correct order (child first)
@@ -992,7 +1665,7 @@ def reset_database(request: ResetRequest, session: Session = Depends(get_session
     
     session.commit()
     
-    log_activity(session, "SYSTEM_RESET", "Всі дані було очищено адміністратором")
+    log_activity(session, "SYSTEM_RESET", "Всі дані було очищено суперадміністратором")
     return {"message": "All data has been reset"}
 
 
@@ -1039,7 +1712,7 @@ def backup_database(current_user: User = Depends(get_admin_user), session: Sessi
 
 
 @router.post("/admin/restore")
-def restore_database(file: UploadFile = File(...), current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
+def restore_database(file: UploadFile = File(...), current_user: User = Depends(get_super_admin_user), session: Session = Depends(get_session)):
     import json
     from sqlmodel import delete
     
@@ -1161,11 +1834,18 @@ async def upload_file(
     order_id: int, 
     folder_category: str,
     file: UploadFile = File(...), 
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     order = session.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, order)
+
+    try:
+        folder_category = normalize_folder_category(folder_category)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid folder category")
         
     settings = load_settings()
     
@@ -1201,10 +1881,22 @@ async def upload_file(
     return new_file
 
 @router.get("/download/{order_id}/{folder_category}/{filename}")
-def download_file(order_id: int, folder_category: str, filename: str, session: Session = Depends(get_session)):
+def download_file(
+    order_id: int,
+    folder_category: str,
+    filename: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
     order = session.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    ensure_order_access(current_user, order)
+
+    try:
+        folder_category = normalize_folder_category(folder_category)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid folder category")
         
     settings = load_settings()
     safe_filename = sanitize_filename(filename)
@@ -1216,7 +1908,10 @@ def download_file(order_id: int, folder_category: str, filename: str, session: S
     return FileResponse(path=file_path, filename=safe_filename)
 
 @router.get("/debug/force_fix")
-def debug_force_fix(session: Session = Depends(get_session)):
+def debug_force_fix(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_admin_user)
+):
     report = []
     try:
         # 1. Check Marushchak

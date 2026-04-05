@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getFiles, deleteFileLink, uploadFile } from '../api';
+import { getFiles, deleteFileLink, uploadFile, API_BASE_URL } from '../api';
 
 const FileManager = ({ projectId, onBack }) => {
     const [currentFolder, setCurrentFolder] = useState(null);
@@ -123,7 +123,7 @@ const FileManager = ({ projectId, onBack }) => {
                                         <div className="min-w-0">
                                             <p className="text-sm font-bold text-slate-700 truncate">{file.name}</p>
                                             <a
-                                                href={file.url.startsWith('/') ? `http://localhost:8000${file.url}` : file.url}
+                                                href={file.url.startsWith('/') ? `${API_BASE_URL}${file.url}` : file.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 download={file.url.startsWith('/')}

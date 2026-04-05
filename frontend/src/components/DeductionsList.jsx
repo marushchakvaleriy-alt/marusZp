@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getDeductions, createDeduction, deleteDeduction } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const DeductionsList = () => {
+    const { user } = useAuth();
+    const canManage = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'super_admin';
+
     const [deductions, setDeductions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -122,9 +126,20 @@ const DeductionsList = () => {
                                             {deduction.description}
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-lg font-black text-red-600">
-                                                {deduction.amount.toLocaleString()} ₴
-                                            </span>
+                                            <div className="flex items-center justify-end gap-3">
+                                                <span className="text-lg font-black text-red-600">
+                                                    {deduction.amount.toLocaleString()} ₴
+                                                </span>
+                                                {canManage && (
+                                                    <button
+                                                        onClick={() => handleDelete(deduction.id)}
+                                                        className="text-red-600 hover:text-red-800 p-1"
+                                                        title="Видалити штраф"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
 
                                     </tr>

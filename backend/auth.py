@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import os
 from jose import JWTError, jwt
 import bcrypt  # Use direct bcrypt instead of passlib
 from fastapi import Depends, HTTPException, status
@@ -8,9 +9,9 @@ from sqlmodel import Session, select
 from database import get_session
 from models import User
 
-# Secret key for JWT encoding/decoding
-# In production, this should be an environment variable
-SECRET_KEY = "supersecretkey_change_this_in_production_marus_salary_app"
+# Secret key for JWT encoding/decoding.
+# Must be set via environment variable in production.
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-unsafe-secret-change-me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week session
 
@@ -59,19 +60,31 @@ def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Dep
     return user
 
 def get_current_active_user(current_user: User = Depends(get_current_user)):
-    # Can add is_active check here if needed
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
+        )
     return current_user
 
 def get_admin_user(current_user: User = Depends(get_current_active_user)):
-    if current_user.role != "admin":
+    if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Admin privileges required"
         )
     return current_user
 
+def get_super_admin_user(current_user: User = Depends(get_current_active_user)):
+    if current_user.role != "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin privileges required"
+        )
+    return current_user
+
 def get_manager_user(current_user: User = Depends(get_current_active_user)):
-    if current_user.role not in ["admin", "manager"]:
+    if current_user.role not in ["admin", "manager", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Manager privileges required"

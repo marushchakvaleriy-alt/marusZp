@@ -8,17 +8,20 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
         date_received: new Date().toISOString().split('T')[0],
         notes: '',
         constructor_id: null,
+        manager_id: null,
         manual_order_id: null
     });
     const [orders, setOrders] = useState([]);
     const [constructors, setConstructors] = useState([]);
+    const [managers, setManagers] = useState([]);
+    const [paymentRole, setPaymentRole] = useState('constructor'); // 'constructor' or 'manager'
     const [useManual, setUseManual] = useState(false);
     const [result, setResult] = useState(null);
 
     useEffect(() => {
         if (isOpen) {
             fetchOrders();
-            fetchConstructors();
+            fetchUsers();
             setResult(null);
         }
     }, [isOpen]);
@@ -32,20 +35,25 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
         }
     };
 
-    const fetchConstructors = async () => {
+    const fetchUsers = async () => {
         try {
             const users = await getUsers();
-            // Filter only constructors
             setConstructors(users.filter(u => u.role === 'constructor'));
+            setManagers(users.filter(u => u.role === 'manager' || u.role === 'admin' || u.role === 'super_admin'));
         } catch (error) {
             console.error('Failed to fetch users:', error);
         }
     };
 
-    // Filter orders based on selected constructor (optional, helps find orders easier)
+    // Filter orders based on selected person (optional, helps find orders easier)
     const getFilteredOrders = () => {
-        if (!formData.constructor_id) return orders;
-        return orders.filter(o => o.constructor_id === formData.constructor_id);
+        if (paymentRole === 'constructor') {
+            if (!formData.constructor_id) return orders;
+            return orders.filter(o => o.constructor_id === formData.constructor_id);
+        } else {
+            if (!formData.manager_id) return orders;
+            return orders.filter(o => o.manager_id === formData.manager_id);
+        }
     };
 
     if (!isOpen) return null;
@@ -56,11 +64,12 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
             const paymentData = {
                 amount: parseFloat(formData.amount),
                 date_received: formData.date_received,
-                notes: formData.constructor_id
-                    ? `Оплата для конструктора ID ${formData.constructor_id}`
-                    : null,
+                notes: formData.notes || (paymentRole === 'constructor'
+                    ? (formData.constructor_id ? `Оплата для конструктора ID ${formData.constructor_id}` : null)
+                    : (formData.manager_id ? `Оплата для менеджера ID ${formData.manager_id}` : null)),
                 manual_order_id: useManual ? formData.manual_order_id : null,
-                constructor_id: formData.constructor_id || null
+                constructor_id: paymentRole === 'constructor' ? formData.constructor_id : null,
+                manager_id: paymentRole === 'manager' ? formData.manager_id : null
             };
 
             const response = await addPayment(paymentData);
@@ -69,7 +78,7 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
             if (onSuccess) {
                 setTimeout(() => {
                     onSuccess();
-                    setFormData({ amount: '', date_received: new Date().toISOString().split('T')[0], notes: '', manual_order_id: null, constructor_id: null });
+                    setFormData({ amount: '', date_received: new Date().toISOString().split('T')[0], notes: '', manual_order_id: null, constructor_id: null, manager_id: null });
                     setUseManual(false);
                     onClose();
                 }, 3000);
@@ -98,7 +107,7 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
                                         <div key={idx} className="flex justify-between text-sm bg-white p-3 rounded-xl">
                                             <span className="font-bold">{alloc.order_name}</span>
                                             <span className="text-slate-500">
-                                                {alloc.stage === 'advance' ? 'Аванс' : 'Фінал'}: {alloc.amount.toLocaleString()} ₴
+                                                {alloc.stage === 'advance' ? 'Аванс' : (alloc.stage === 'final' ? 'Фінал' : 'Комісія менеджера')}: {alloc.amount.toLocaleString()} ₴
                                             </span>
                                         </div>
                                     ))}
@@ -140,26 +149,72 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Конструктор (Обов'язково)</label>
-                            <select
-                                required={!useManual}
-                                className={`w-full p-3 border rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 ${!formData.constructor_id && !useManual ? 'border-red-300 bg-red-50' : 'bg-slate-50 border-slate-200'}`}
-                                value={formData.constructor_id || ''}
-                                onChange={e => {
-                                    const val = e.target.value ? parseInt(e.target.value) : null;
-                                    setFormData({ ...formData, constructor_id: val });
+                        <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
+                            <button
+                                type="button"
+                                className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition ${paymentRole === 'constructor' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                onClick={() => {
+                                    setPaymentRole('constructor');
+                                    setFormData(prev => ({ ...prev, manager_id: null }));
                                 }}
                             >
-                                <option value="">-- Оберіть конструктора --</option>
-                                {constructors.map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        👤 {c.full_name || c.username}
-                                    </option>
-                                ))}
-                            </select>
+                                👤 Конструктор
+                            </button>
+                            <button
+                                type="button"
+                                className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition ${paymentRole === 'manager' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                onClick={() => {
+                                    setPaymentRole('manager');
+                                    setFormData(prev => ({ ...prev, constructor_id: null }));
+                                }}
+                            >
+                                💼 Менеджер
+                            </button>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                {paymentRole === 'constructor' ? 'Конструктор' : 'Менеджер'} (Обов'язково)
+                            </label>
+                            {paymentRole === 'constructor' ? (
+                                <select
+                                    required={!useManual}
+                                    className={`w-full p-3 border rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 ${!formData.constructor_id && !useManual ? 'border-red-300 bg-red-50' : 'bg-slate-50 border-slate-200'}`}
+                                    value={formData.constructor_id || ''}
+                                    onChange={e => {
+                                        const val = e.target.value ? parseInt(e.target.value) : null;
+                                        setFormData({ ...formData, constructor_id: val });
+                                    }}
+                                >
+                                    <option value="">-- Оберіть конструктора --</option>
+                                    {constructors.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            👤 {c.full_name || c.username}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <select
+                                    required={!useManual}
+                                    className={`w-full p-3 border rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 ${!formData.manager_id && !useManual ? 'border-red-300 bg-red-50' : 'bg-slate-50 border-slate-200'}`}
+                                    value={formData.manager_id || ''}
+                                    onChange={e => {
+                                        const val = e.target.value ? parseInt(e.target.value) : null;
+                                        setFormData({ ...formData, manager_id: val });
+                                    }}
+                                >
+                                    <option value="">-- Оберіть менеджера --</option>
+                                    {managers.map(m => (
+                                        <option key={m.id} value={m.id}>
+                                            💼 {m.full_name || m.username}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                             <p className="text-[10px] text-slate-400 mt-1 pl-1">
-                                Кошти будуть розподілені <b>тільки</b> на замовлення обраного конструктора.
+                                {paymentRole === 'constructor'
+                                    ? "Кошти будуть розподілені тільки на замовлення обраного конструктора."
+                                    : "Кошти будуть розподілені тільки на комісію обраного менеджера."}
                             </p>
                         </div>
 

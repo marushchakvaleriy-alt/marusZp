@@ -82,7 +82,6 @@ const UserManagement = ({ onBack }) => {
             role: u.role,
             card_number: u.card_number || '',
             email: u.email || '',
-            email: u.email || '',
             phone_number: u.phone_number || '',
             telegram_id: u.telegram_id || '',
             salary_mode: u.salary_mode || 'sales_percent',
@@ -140,7 +139,7 @@ const UserManagement = ({ onBack }) => {
         }
     };
 
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
         return <div className="text-center text-red-500 mt-10">Доступ заборонено</div>;
     }
 
@@ -225,6 +224,7 @@ const UserManagement = ({ onBack }) => {
                                     <option value="constructor">Конструктор</option>
                                     <option value="manager">Менеджер</option>
                                     <option value="admin">Адміністратор</option>
+                                    <option value="super_admin">Супер-Адміністратор 🌟</option>
                                 </select>
                             </div>
 
@@ -459,10 +459,11 @@ const UserManagement = ({ onBack }) => {
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3 mb-1">
                                                     <span className="font-bold text-lg text-slate-800">{u.full_name}</span>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${u.role === 'admin' ? 'bg-purple-100 text-purple-600' :
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${u.role === 'super_admin' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                                        u.role === 'admin' ? 'bg-purple-100 text-purple-600' :
                                                         u.role === 'manager' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
                                                         }`}>
-                                                        {u.role === 'admin' ? 'Адмін' : u.role === 'manager' ? 'Менеджер' : 'Конструктор'}
+                                                        {u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : u.role === 'manager' ? 'Менеджер' : 'Конструктор'}
                                                     </span>
                                                 </div>
                                                 <div className="flex flex-col gap-1 text-sm text-slate-500">
@@ -495,6 +496,22 @@ const UserManagement = ({ onBack }) => {
                                                                 ID: {u.telegram_id}
                                                             </span>
                                                         </span>
+                                                    )}
+
+                                                    {/* Salary Terms Display */}
+                                                    {(u.role === 'constructor' || u.role === 'manager') && (
+                                                        <div className="mt-2 p-2 bg-white rounded-xl border border-slate-100 flex items-center gap-2 text-[11px] font-bold">
+                                                            <span className="text-slate-400 uppercase tracking-tighter">Умови:</span>
+                                                            <span className="text-green-600 flex items-center gap-1">
+                                                                {u.salary_mode === 'sales_percent' && <>💵 {u.salary_percent}% від продажу</>}
+                                                                {u.salary_mode === 'materials_percent' && <>🧱 {u.salary_percent}% від матеріалів</>}
+                                                                {u.salary_mode === 'fixed_amount' && <>💰 Фіксована ціна</>}
+                                                            </span>
+                                                            <span className="text-slate-300 mx-1">|</span>
+                                                            <span className="text-blue-500">
+                                                                📊 {u.payment_stage1_percent}% / {u.payment_stage2_percent}%
+                                                            </span>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>

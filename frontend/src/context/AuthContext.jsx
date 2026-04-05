@@ -8,25 +8,35 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
 
+    const applyToken = (jwtToken) => {
+        if (jwtToken) {
+            api.defaults.headers.common['Authorization'] = `Bearer ${jwtToken}`;
+        } else {
+            delete api.defaults.headers.common['Authorization'];
+        }
+    };
+
+    const fetchCurrentUser = async (jwtToken) => {
+        applyToken(jwtToken);
+        const response = await api.get('/users/me');
+        setUser(response.data);
+    };
+
     useEffect(() => {
         const initAuth = async () => {
             if (token) {
                 try {
-                    // Fetch current user or basic validity check
-                    // For now, we decode token or just assume valid if exists
-                    // Ideally call /users/me endpoint
-                    const payload = JSON.parse(atob(token.split('.')[1]));
-                    setUser({ username: payload.sub, role: payload.role || 'constructor' });
-                    // Set default header
-                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    await fetchCurrentUser(token);
                 } catch (error) {
                     logout();
                 }
+            } else {
+                applyToken(null);
             }
             setLoading(false);
         };
         initAuth();
-    }, [token]);
+    }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const login = async (username, password) => {
         try {
@@ -39,10 +49,7 @@ export const AuthProvider = ({ children }) => {
 
             localStorage.setItem('token', access_token);
             setToken(access_token);
-
-            // Set user from token payload immediately
-            const payload = JSON.parse(atob(access_token.split('.')[1]));
-            setUser({ username: payload.sub, role: payload.role || 'constructor' });
+            await fetchCurrentUser(access_token);
             return true;
         } catch (error) {
             console.error("Login failed", error);
@@ -54,7 +61,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('token');
         setToken(null);
         setUser(null);
-        delete api.defaults.headers.common['Authorization'];
+        applyToken(null);
     };
 
     return (

@@ -3,6 +3,7 @@ from typing import List, Tuple, Optional
 from sqlmodel import Session, select
 from models import Order, User
 from payments import Payment, PaymentAllocation
+from financial_logic import calculate_constructor_financials
 
 class PaymentDistributionService:
     """Сервіс для автоматичного розподілу платежів"""
@@ -49,40 +50,27 @@ class PaymentDistributionService:
         return allocations, remaining
     
     @staticmethod
-    def _calculate_financials(order: Order, session: Session) -> Tuple[float, float, float]:
+    def _calculate_financials(order: Order, session: Session) -> Tuple[float, float, float, float]:
         """
         Calculates (bonus, advance_amount, final_amount) using the same logic as OrderRead.
         """
-        constructor = session.get(User, order.constructor_id) if order.constructor_id else None
+        constructor_financials = calculate_constructor_financials(order, session=session)
+        bonus = constructor_financials["bonus"]
+        advance_amount = constructor_financials["advance_amount"]
+        final_amount = constructor_financials["final_amount"]
         
-        # 1. Determine bonus amount
-        if order.fixed_bonus is not None:
-            bonus = order.fixed_bonus
-        elif constructor and hasattr(constructor, 'salary_mode') and hasattr(constructor, 'salary_percent'):
-            if constructor.salary_mode == 'fixed_amount':
-                bonus = constructor.salary_percent
-            elif constructor.salary_mode == 'materials_percent':
-                bonus = (order.material_cost or 0) * (constructor.salary_percent / 100)
+        # 3. Manager Bonus
+        manager = session.get(User, order.manager_id) if order.manager_id else None
+        manager_bonus = 0.0
+        if manager and hasattr(manager, 'salary_mode') and hasattr(manager, 'salary_percent'):
+            if manager.salary_mode == 'fixed_amount':
+                manager_bonus = manager.salary_percent
+            elif manager.salary_mode == 'materials_percent':
+                manager_bonus = (order.material_cost or 0) * (manager.salary_percent / 100)
             else:
-                bonus = order.price * (constructor.salary_percent / 100)
-        else:
-            bonus = order.price * 0.05
-            
-        # 2. Determine stage distribution percentages
-        if order.custom_stage1_percent is not None:
-            stage1_pct = order.custom_stage1_percent
-            stage2_pct = order.custom_stage2_percent if order.custom_stage2_percent is not None else (100 - stage1_pct)
-        elif constructor and hasattr(constructor, 'payment_stage1_percent'):
-            stage1_pct = constructor.payment_stage1_percent
-            stage2_pct = constructor.payment_stage2_percent
-        else:
-            stage1_pct = 50.0
-            stage2_pct = 50.0
-            
-        advance_amount = bonus * (stage1_pct / 100)
-        final_amount = bonus * (stage2_pct / 100)
+                manager_bonus = order.price * (manager.salary_percent / 100)
         
-        return bonus, advance_amount, final_amount
+        return bonus, advance_amount, final_amount, manager_bonus
 
     @staticmethod
     def _allocate_to_order(
@@ -96,7 +84,7 @@ class PaymentDistributionService:
         remaining = available_amount
         
         # Calculate financials dynamically
-        _, advance_amount, final_amount = PaymentDistributionService._calculate_financials(order, session)
+        _, advance_amount, final_amount, _ = PaymentDistributionService._calculate_financials(order, session)
         
         # Аванс
         if (stage_priority is None or stage_priority == "advance"):
@@ -195,6 +183,11 @@ class PaymentDistributionService:
             elif payment.constructor_id:
                 # Розподіляти ТІЛЬКИ на замовлення цього конструктора
                 target_orders = [o for o in orders if o.constructor_id == payment.constructor_id] 
+            
+            # Пріоритет 3: Фільтрація по менеджеру
+            elif payment.manager_id:
+                # Розподіляти ТІЛЬКИ на замовлення цього менеджера
+                target_orders = [o for o in orders if o.manager_id == payment.manager_id]
 
             # Якщо є залишок, пробуємо його розподілити
             for order in target_orders:
@@ -203,7 +196,7 @@ class PaymentDistributionService:
                     
                 # Скільки треба цьому замовленню?
                 amount_allocated, new_allocs = PaymentDistributionService._allocate_payment_chunk_to_order(
-                    order, remaining_payment, session
+                    order, remaining_payment, session, is_manager_payment=bool(payment.manager_id)
                 )
                 
                 if amount_allocated > 0:
@@ -227,7 +220,8 @@ class PaymentDistributionService:
     def _allocate_payment_chunk_to_order(
         order: Order,
         amount: float,
-        session: Session
+        session: Session,
+        is_manager_payment: bool = False
     ) -> Tuple[float, List[dict]]:
         """
         Спроба 'влити' суму amount в замовлення.
@@ -238,9 +232,29 @@ class PaymentDistributionService:
         remaining_to_give = amount
         
         # Calculate financials dynamically
-        _, advance_amount, final_amount = PaymentDistributionService._calculate_financials(order, session)
+        _, advance_amount, final_amount, manager_bonus = PaymentDistributionService._calculate_financials(order, session)
         
-        # 1. Аванс
+        if is_manager_payment:
+            # Менеджерська виплата
+            manager_needed = max(0, manager_bonus - (order.manager_paid_amount or 0))
+            if manager_needed > 0.01 and remaining_to_give > 0:
+                chunk = min(remaining_to_give, manager_needed)
+                order.manager_paid_amount += chunk
+                taken += chunk
+                remaining_to_give -= chunk
+                
+                if order.manager_paid_amount >= manager_bonus - 0.01 and not order.date_manager_paid:
+                    order.date_manager_paid = date.today()
+                
+                allocations.append({
+                    "order_id": order.id,
+                    "order_name": order.name,
+                    "stage": "manager",
+                    "amount": chunk
+                })
+            return taken, allocations
+
+        # Конструкторська виплата (default)
         # Розподіляти тільки якщо етап "Конструктив" здано (date_to_work has value)
         if order.date_to_work:
             advance_needed = max(0, advance_amount - order.advance_paid_amount)
