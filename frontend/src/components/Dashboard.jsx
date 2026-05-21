@@ -155,8 +155,8 @@ const Dashboard = ({ refreshTrigger }) => {
                                             <p className="text-lg font-black text-red-600">{m.debt.toLocaleString()}</p>
                                         </div>
                                         <div>
-                                            <p className="text-[10px] text-slate-300 font-bold uppercase">Виплачено</p>
-                                            <p className="text-lg font-black text-slate-600">{m.paid.toLocaleString()}</p>
+                                            <p className="text-[10px] text-yellow-300 font-bold uppercase">Вільні</p>
+                                            <p className="text-lg font-black text-yellow-600">{(m.unallocated || 0).toLocaleString()}</p>
                                         </div>
                                     </div>
                                 </div>

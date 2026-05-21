@@ -1838,9 +1838,6 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             }
         
         
-        # Calculate Global Total Debt (Sum of all constructor net debts)
-        # We need to iterate all constructors first
-        
         # Per-User Stats
         constructors_stats = []
         manager_stats = []
@@ -1895,6 +1892,7 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
                 "unallocated": c_unallocated,
                 "debt": c_debt 
             })
+        
         # Global Manager Stats
         total_manager_bonus = 0.0
         total_manager_paid = 0.0
@@ -1911,12 +1909,28 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
                 m_paid_total += manager_financials["active_paid_amount"]
                 m_debt += manager_financials["current_debt"]
 
+            # Calculate manager unallocated (free) funds
+            m_payments = session.exec(select(Payment).where(Payment.manager_id == m.id)).all()
+            m_total_received = sum(p.amount for p in m_payments)
+            
+            m_payment_ids = [p.id for p in m_payments]
+            if m_payment_ids:
+                m_total_allocated = session.exec(
+                    select(func.sum(PaymentAllocation.amount))
+                    .where(PaymentAllocation.payment_id.in_(m_payment_ids))
+                ).one() or 0.0
+            else:
+                m_total_allocated = 0.0
+                
+            m_unallocated = m_total_received - m_total_allocated
+
             manager_stats.append({
                 "id": m.id,
                 "name": m.full_name or m.username,
                 "bonus": m_bonus_total,
                 "paid": m_paid_total,
-                "debt": m_debt
+                "debt": m_debt,
+                "unallocated": m_unallocated
             })
             total_manager_bonus += m_bonus_total
             total_manager_paid += m_paid_total
