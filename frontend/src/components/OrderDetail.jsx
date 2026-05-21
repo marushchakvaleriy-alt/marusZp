@@ -273,7 +273,7 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
     useEffect(() => {
         if (!canManage) return;
         getUsers().then(users => {
-            setConstructors(users.filter(u => u.role === 'constructor' || u.role === 'admin' || u.role === 'super_admin'));
+            setConstructors(users.filter(u => u.role === 'constructor' || u.role === 'admin' || u.role === 'super_admin' || u.role === 'manager'));
             setManagers(users.filter(u => u.role === 'manager' || u.role === 'admin' || u.role === 'super_admin'));
         }).catch(console.error);
     }, [canManage]);
@@ -899,7 +899,7 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                                             <option value="">-- Не призначено --</option>
                                             {constructors.map(u => (
                                                 <option key={u.id} value={u.id}>
-                                                    {u.full_name || u.username} ({u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : 'Конструктор'})
+                                                     {u.full_name || u.username} ({u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : u.role === 'manager' ? 'Менеджер' : 'Конструктор'})
                                                 </option>
                                             ))}
                                         </select>

@@ -38,7 +38,7 @@ const PaymentModal = ({ isOpen, onClose, onSuccess }) => {
     const fetchUsers = async () => {
         try {
             const users = await getUsers();
-            setConstructors(users.filter(u => u.role === 'constructor'));
+            setConstructors(users.filter(u => u.role === 'constructor' || u.role === 'admin' || u.role === 'super_admin' || u.role === 'manager'));
             setManagers(users.filter(u => u.role === 'manager' || u.role === 'admin' || u.role === 'super_admin'));
         } catch (error) {
             console.error('Failed to fetch users:', error);
