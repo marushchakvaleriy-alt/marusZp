@@ -1312,342 +1312,152 @@ const OrderDetail = ({ order, onBack, onUpdate }) => {
                 </div>
 
                 <div className="p-8 border-b border-slate-100 bg-slate-50/30">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-                        <div className="flex flex-wrap gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setActiveDetailTab('history')}
-                                className={`rounded-2xl border px-5 py-3 text-left transition ${activeDetailTab === 'history'
-                                    ? 'border-blue-200 bg-white text-blue-700 shadow-sm'
-                                    : 'border-slate-200 bg-white/70 text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-2 text-lg font-black uppercase italic">
-                                    <i className="fas fa-calculator text-blue-600"></i> Розрахунок по етапах
-                                </div>
-                                <p className="mt-1 text-xs font-semibold normal-case text-slate-400">
-                                    Короткий підсумок по Етапу 1 та Етапу 2: дати, виплати та залишок
+                    <div className="space-y-6">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800 uppercase italic flex items-center gap-2">
+                                    <i className="fas fa-diagram-project text-violet-600"></i> Планування замовлення
+                                </h3>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Тут можна задати ключові дати та терміни по всіх процесах. Дати етапів нижче рахуються автоматично.
                                 </p>
-                            </button>
+                            </div>
 
-                            <button
-                                type="button"
-                                onClick={() => setActiveDetailTab('planning')}
-                                className={`rounded-2xl border px-5 py-3 text-left transition ${activeDetailTab === 'planning'
-                                    ? 'border-violet-200 bg-white text-violet-700 shadow-sm'
-                                    : 'border-slate-200 bg-white/70 text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-2 text-lg font-black uppercase italic">
-                                    <i className="fas fa-diagram-project text-violet-600"></i> Планування
-                                </div>
-                                <p className="mt-1 text-xs font-semibold normal-case text-slate-400">
-                                    Дати, терміни та всі виробничі процеси по замовленню
-                                </p>
-                            </button>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-2">
-                            {activeDetailTab === 'history' && isAdmin && (
-                                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                            {canManage ? (
+                                <div className="flex items-center gap-3">
+                                    {planningMessage ? (
+                                        <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">
+                                            {planningMessage}
+                                        </span>
+                                    ) : null}
                                     <button
                                         type="button"
-                                        onClick={() => setHistoryScope('constructor')}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition ${historyScope === 'constructor'
-                                            ? 'bg-white text-blue-600 shadow-sm'
-                                            : 'text-slate-500 hover:text-slate-700'
-                                            }`}
+                                        onClick={handleSavePlanning}
+                                        disabled={!planningDirty || planningSaving}
+                                        className="px-5 py-2.5 bg-violet-600 text-white font-bold rounded-xl shadow-lg shadow-violet-200 hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        Конструктор
+                                        {planningSaving ? 'Збереження...' : 'Зберегти планування'}
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setHistoryScope('manager')}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition ${historyScope === 'manager'
-                                            ? 'bg-white text-amber-700 shadow-sm'
-                                            : 'text-slate-500 hover:text-slate-700'
-                                            }`}
-                                    >
-                                        Менеджер
-                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                                    Для вашої ролі доступний перегляд
                                 </div>
                             )}
-                            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
-                                {activeDetailTab === 'history'
-                                    ? (showManagerHistory ? '2 етапи (менеджер)' : '2 етапи (конструктор)')
-                                    : canManage
-                                        ? planningDirty
-                                            ? 'Є незбережені зміни'
-                                            : planningMessage || 'Планування актуальне'
-                                        : 'Режим перегляду'}
-                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+                            {[
+                                { key: 'date_received', title: 'Дата отримання', hint: 'Базова дата для плану' },
+                                { key: 'date_manager_handover', title: 'Передано конструктору', hint: 'Старт Етапу 1 менеджера' },
+                                { key: 'date_to_work', title: 'Передано в роботу', hint: 'Старт конструктиву' },
+                                { key: 'date_design_deadline', title: 'Дедлайн конструктиву', hint: 'Контрольна дата' },
+                                { key: 'date_installation_plan', title: 'План монтажу', hint: 'Якір для зворотного розрахунку' },
+                                { key: 'date_installation', title: 'Факт монтажу', hint: 'Коли реально змонтовано' },
+                            ].map((field) => (
+                                <div key={field.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        {field.title}
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-semibold text-slate-400">{field.hint}</div>
+                                    <UKDatePicker
+                                        selected={planningData[field.key]}
+                                        onChange={(value) => updatePlanningField(field.key, value || '')}
+                                        disabled={!canManage}
+                                        placeholder="ДД.ММ.РРРР"
+                                        className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 text-left outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-sm text-violet-700">
+                            <span className="font-black uppercase text-[10px] tracking-widest mr-2">Логіка розрахунку:</span>
+                            {planningPreview.calculationMode === 'backward'
+                                ? 'є дата планового монтажу, тому попередні процеси рахуються назад від неї.'
+                                : 'дати процесів рахуються вперед від дати "Передано в роботу" або "Дата отримання".'}
+                        </div>
+
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {planningPreview.stages.map((stage) => (
+                                <div key={stage.key} className={`rounded-3xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-inset ${stage.ring}`}>
+                                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-3">
+                                                <span className={`h-3 w-3 rounded-full ${stage.accent}`}></span>
+                                                <h4 className="text-lg font-black uppercase italic text-slate-800">{stage.title}</h4>
+                                            </div>
+                                            <p className="mt-2 text-sm text-slate-500">
+                                                Розрахований інтервал для цього процесу з поточного плану замовлення.
+                                            </p>
+                                        </div>
+
+                                        <div className="w-full md:w-[128px]">
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                                Термін, днів
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="60"
+                                                value={stage.duration}
+                                                onChange={(e) => updatePlanningField(stage.durationField, e.target.value)}
+                                                disabled={!canManage || stage.lockedByDates}
+                                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                            />
+                                            {stage.lockedByDates ? (
+                                                <div className="mt-2 text-[10px] font-bold text-slate-400">
+                                                    Рахується з дат старту/фінішу
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 grid grid-cols-2 gap-3">
+                                        <div className="rounded-2xl bg-slate-50 p-4">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Старт</div>
+                                            <UKDatePicker
+                                                selected={planningData[stage.startField] || toInputDateValue(stage.start)}
+                                                onChange={(value) => updatePlanningField(stage.startField, value || '')}
+                                                disabled={!canManage}
+                                                placeholder="ДД.ММ.РРРР"
+                                                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 text-left outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                            />
+                                            <div className="mt-2 text-[10px] font-semibold text-slate-400">
+                                                {stage.start ? `Поточна дата: ${formatPlanningDate(stage.start)}` : 'Дата ще не визначена'}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-2xl bg-slate-50 p-4">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Фініш</div>
+                                            <UKDatePicker
+                                                selected={planningData[stage.endField] || toInputDateValue(stage.end)}
+                                                onChange={(value) => updatePlanningField(stage.endField, value || '')}
+                                                disabled={!canManage}
+                                                placeholder="ДД.ММ.РРРР"
+                                                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 text-left outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                            />
+                                            <div className="mt-2 text-[10px] font-semibold text-slate-400">
+                                                {stage.end ? `Поточна дата: ${formatPlanningDate(stage.end)}` : 'Дата ще не визначена'}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <div className="mb-2 flex items-center justify-between text-[11px] font-bold text-slate-400">
+                                            <span>Тривалість процесу</span>
+                                            <span>{clampPlanningDays(planningData[stage.durationField], stage.duration)} дн.</span>
+                                        </div>
+                                        <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full ${stage.accent}`}
+                                                style={{ width: `${Math.min(100, 18 + clampPlanningDays(planningData[stage.durationField], stage.duration) * 8)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-
-                    {activeDetailTab === 'history' ? (
-                        showManagerHistory ? (
-                            <div className="space-y-4">
-                                <div className="rounded-xl border border-amber-100 bg-amber-50/40 px-4 py-2 text-xs font-semibold text-amber-800">
-                                    Підсумок по менеджеру: дата активації, скільки виплачено та який залишок по кожному етапу.
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div className={`rounded-xl border p-4 ${managerStage1Active ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-white/80'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="text-sm font-black text-blue-700 uppercase">Етап 1 ({managerStage1Percent}%)</div>
-                                            <span className={`text-[10px] font-bold uppercase ${managerStage1Active ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                {managerStage1Active ? 'Активний' : 'Очікує'}
-                                            </span>
-                                        </div>
-                                        <div className="space-y-1 text-sm">
-                                            <div className="flex justify-between"><span className="text-slate-500">Дата передачі:</span><span className="font-bold">{formatDate(order.date_manager_handover)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Нараховано:</span><span className="font-bold text-blue-700">{formatMoney(order.manager_stage1_amount)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Виплачено:</span><span className="font-bold text-emerald-700">{formatMoney(managerStage1Paid)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Залишок:</span><span className={`font-black ${managerStage1Remaining > 0.01 ? 'text-amber-700' : 'text-green-700'}`}>{formatMoney(managerStage1Remaining)}</span></div>
-                                        </div>
-                                    </div>
-
-                                    <div className={`rounded-xl border p-4 ${managerStage2Active ? 'border-violet-200 bg-violet-50/50' : 'border-slate-200 bg-white/80'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="text-sm font-black text-violet-700 uppercase">Етап 2 ({managerStage2Percent}%)</div>
-                                            <span className={`text-[10px] font-bold uppercase ${managerStage2Active ? 'text-violet-600' : 'text-slate-400'}`}>
-                                                {managerStage2Active ? 'Активний' : 'Очікує'}
-                                            </span>
-                                        </div>
-                                        <div className="space-y-1 text-sm">
-                                            <div className="flex justify-between"><span className="text-slate-500">Дата монтажу:</span><span className="font-bold">{formatDate(order.date_installation)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Нараховано:</span><span className="font-bold text-violet-700">{formatMoney(order.manager_stage2_amount)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Виплачено:</span><span className="font-bold text-emerald-700">{formatMoney(managerStage2Paid)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Залишок:</span><span className={`font-black ${managerStage2Remaining > 0.01 ? 'text-amber-700' : 'text-green-700'}`}>{formatMoney(managerStage2Remaining)}</span></div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                    <div className="rounded-lg border border-amber-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Повна премія</div>
-                                        <div className="text-sm font-black text-amber-700">{formatMoney(managerTotalBonus)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-amber-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Нараховано зараз</div>
-                                        <div className="text-sm font-black text-amber-700">{formatMoney(managerAccruedAmount)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-emerald-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Виплачено</div>
-                                        <div className="text-sm font-black text-emerald-700">{formatMoney(managerPaidActiveAmount)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-amber-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Поточний залишок</div>
-                                        <div className={`text-sm font-black ${managerRemainingAmount > 0.01 ? 'text-amber-700' : 'text-green-700'}`}>{formatMoney(managerRemainingAmount)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <div className="rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-2 text-xs font-semibold text-blue-800">
-                                    Підсумок по конструктору: дата здачі/монтажу, виплати і залишок по кожному етапу.
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div className={`rounded-xl border p-4 ${constructorStage1Active ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-white/80'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="text-sm font-black text-blue-700 uppercase">Етап 1 ({constructorStage1Percent}%)</div>
-                                            <span className={`text-[10px] font-bold uppercase ${constructorStage1Active ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                {constructorStage1Active ? 'Активний' : 'Очікує'}
-                                            </span>
-                                        </div>
-                                        <div className="space-y-1 text-sm">
-                                            <div className="flex justify-between"><span className="text-slate-500">Дата здачі в роботу:</span><span className="font-bold">{formatDate(order.date_to_work)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Нараховано:</span><span className="font-bold text-blue-700">{formatMoney(constructorStage1Amount)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Виплачено:</span><span className="font-bold text-emerald-700">{formatMoney(constructorPaidStage1)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Залишок:</span><span className={`font-black ${constructorStage1Remaining > 0.01 ? 'text-amber-700' : 'text-green-700'}`}>{formatMoney(constructorStage1Remaining)}</span></div>
-                                        </div>
-                                    </div>
-
-                                    <div className={`rounded-xl border p-4 ${constructorStage2Active ? 'border-violet-200 bg-violet-50/50' : 'border-slate-200 bg-white/80'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="text-sm font-black text-violet-700 uppercase">Етап 2 ({constructorStage2Percent}%)</div>
-                                            <span className={`text-[10px] font-bold uppercase ${constructorStage2Active ? 'text-violet-600' : 'text-slate-400'}`}>
-                                                {constructorStage2Active ? 'Активний' : 'Очікує'}
-                                            </span>
-                                        </div>
-                                        <div className="space-y-1 text-sm">
-                                            <div className="flex justify-between"><span className="text-slate-500">Дата монтажу:</span><span className="font-bold">{formatDate(order.date_installation)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Нараховано:</span><span className="font-bold text-violet-700">{formatMoney(constructorStage2Amount)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Виплачено:</span><span className="font-bold text-emerald-700">{formatMoney(constructorPaidStage2)}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">Залишок:</span><span className={`font-black ${constructorStage2Remaining > 0.01 ? 'text-amber-700' : 'text-green-700'}`}>{formatMoney(constructorStage2Remaining)}</span></div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                    <div className="rounded-lg border border-blue-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Повний ПГ</div>
-                                        <div className="text-sm font-black text-blue-700">{formatMoney(constructorTotalBonus)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-blue-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Нараховано зараз</div>
-                                        <div className="text-sm font-black text-blue-700">{formatMoney(constructorAccruedAmount)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-emerald-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Виплачено</div>
-                                        <div className="text-sm font-black text-emerald-700">{formatMoney(constructorPaidActiveAmount)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-blue-100 bg-white/90 px-3 py-2">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Поточний залишок</div>
-                                        <div className={`text-sm font-black ${constructorRemainingAmount > 0.01 ? 'text-amber-700' : 'text-green-700'}`}>{formatMoney(constructorRemainingAmount)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        )
-                    ) : (
-                        <div className="space-y-6">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
-                                    <h3 className="text-xl font-black text-slate-800 uppercase italic flex items-center gap-2">
-                                        <i className="fas fa-diagram-project text-violet-600"></i> Планування замовлення
-                                    </h3>
-                                    <p className="text-sm text-slate-500 mt-1">
-                                        Тут можна задати ключові дати та терміни по всіх процесах. Дати етапів нижче рахуються автоматично.
-                                    </p>
-                                </div>
-
-                                {canManage ? (
-                                    <div className="flex items-center gap-3">
-                                        {planningMessage ? (
-                                            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">
-                                                {planningMessage}
-                                            </span>
-                                        ) : null}
-                                        <button
-                                            type="button"
-                                            onClick={handleSavePlanning}
-                                            disabled={!planningDirty || planningSaving}
-                                            className="px-5 py-2.5 bg-violet-600 text-white font-bold rounded-xl shadow-lg shadow-violet-200 hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {planningSaving ? 'Збереження...' : 'Зберегти планування'}
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                                        Для вашої ролі доступний перегляд
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
-                                {[
-                                    { key: 'date_received', title: 'Дата отримання', hint: 'Базова дата для плану' },
-                                    { key: 'date_manager_handover', title: 'Передано конструктору', hint: 'Старт Етапу 1 менеджера' },
-                                    { key: 'date_to_work', title: 'Передано в роботу', hint: 'Старт конструктиву' },
-                                    { key: 'date_design_deadline', title: 'Дедлайн конструктиву', hint: 'Контрольна дата' },
-                                    { key: 'date_installation_plan', title: 'План монтажу', hint: 'Якір для зворотного розрахунку' },
-                                    { key: 'date_installation', title: 'Факт монтажу', hint: 'Коли реально змонтовано' },
-                                ].map((field) => (
-                                    <div key={field.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                            {field.title}
-                                        </div>
-                                        <div className="mt-1 text-[11px] font-semibold text-slate-400">{field.hint}</div>
-                                        <UKDatePicker
-                                            selected={planningData[field.key]}
-                                            onChange={(value) => updatePlanningField(field.key, value || '')}
-                                            disabled={!canManage}
-                                            placeholder="ДД.ММ.РРРР"
-                                            className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 text-left outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="rounded-2xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-sm text-violet-700">
-                                <span className="font-black uppercase text-[10px] tracking-widest mr-2">Логіка розрахунку:</span>
-                                {planningPreview.calculationMode === 'backward'
-                                    ? 'є дата планового монтажу, тому попередні процеси рахуються назад від неї.'
-                                    : 'дати процесів рахуються вперед від дати "Передано в роботу" або "Дата отримання".'}
-                            </div>
-
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                {planningPreview.stages.map((stage) => (
-                                    <div key={stage.key} className={`rounded-3xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-inset ${stage.ring}`}>
-                                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`h-3 w-3 rounded-full ${stage.accent}`}></span>
-                                                    <h4 className="text-lg font-black uppercase italic text-slate-800">{stage.title}</h4>
-                                                </div>
-                                                <p className="mt-2 text-sm text-slate-500">
-                                                    Розрахований інтервал для цього процесу з поточного плану замовлення.
-                                                </p>
-                                            </div>
-
-                                            <div className="w-full md:w-[128px]">
-                                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                                                    Термін, днів
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="60"
-                                                    value={stage.duration}
-                                                    onChange={(e) => updatePlanningField(stage.durationField, e.target.value)}
-                                                    disabled={!canManage || stage.lockedByDates}
-                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                                                />
-                                                {stage.lockedByDates ? (
-                                                    <div className="mt-2 text-[10px] font-bold text-slate-400">
-                                                        Рахується з дат старту/фінішу
-                                                    </div>
-                                                ) : null}
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-5 grid grid-cols-2 gap-3">
-                                            <div className="rounded-2xl bg-slate-50 p-4">
-                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Старт</div>
-                                                <UKDatePicker
-                                                    selected={planningData[stage.startField] || toInputDateValue(stage.start)}
-                                                    onChange={(value) => updatePlanningField(stage.startField, value || '')}
-                                                    disabled={!canManage}
-                                                    placeholder="ДД.ММ.РРРР"
-                                                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 text-left outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                                                />
-                                                <div className="mt-2 text-[10px] font-semibold text-slate-400">
-                                                    {stage.start ? `Поточна дата: ${formatPlanningDate(stage.start)}` : 'Дата ще не визначена'}
-                                                </div>
-                                            </div>
-                                            <div className="rounded-2xl bg-slate-50 p-4">
-                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Фініш</div>
-                                                <UKDatePicker
-                                                    selected={planningData[stage.endField] || toInputDateValue(stage.end)}
-                                                    onChange={(value) => updatePlanningField(stage.endField, value || '')}
-                                                    disabled={!canManage}
-                                                    placeholder="ДД.ММ.РРРР"
-                                                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 text-left outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                                                />
-                                                <div className="mt-2 text-[10px] font-semibold text-slate-400">
-                                                    {stage.end ? `Поточна дата: ${formatPlanningDate(stage.end)}` : 'Дата ще не визначена'}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-4">
-                                            <div className="mb-2 flex items-center justify-between text-[11px] font-bold text-slate-400">
-                                                <span>Тривалість процесу</span>
-                                                <span>{clampPlanningDays(planningData[stage.durationField], stage.duration)} дн.</span>
-                                            </div>
-                                            <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full ${stage.accent}`}
-                                                    style={{ width: `${Math.min(100, 18 + clampPlanningDays(planningData[stage.durationField], stage.duration) * 8)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 {/* Deductions Section */}
