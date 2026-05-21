@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, updateSettings } from '../api';
+import { getSettings, updateSettings, API_BASE_URL } from '../api';
 import TelegramInstructionsModal from './TelegramInstructionsModal';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,8 +13,10 @@ const SettingsModal = ({ onClose }) => {
     const [showInstructions, setShowInstructions] = useState(false);
 
     useEffect(() => {
-        loadSettings();
-    }, []);
+        if (isSuperAdmin) {
+            loadSettings();
+        }
+    }, [isSuperAdmin]);
 
     const loadSettings = async () => {
         try {
@@ -47,6 +49,8 @@ const SettingsModal = ({ onClose }) => {
             setSaving(false);
         }
     };
+
+    if (!isSuperAdmin) return null;
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
@@ -108,7 +112,7 @@ const SettingsModal = ({ onClose }) => {
                                             // but we can import 'api' and use it.
                                             // However, for fetch we need the string. 
                                             // Let's rely on the same logic as api.js:
-                                            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                                            const baseUrl = API_BASE_URL;
 
                                             fetch(`${baseUrl}/admin/backup`, {
                                                 headers: {
@@ -158,7 +162,7 @@ const SettingsModal = ({ onClose }) => {
 
                                                         try {
                                                             const token = localStorage.getItem('token');
-                                                            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                                                            const baseUrl = API_BASE_URL;
 
                                                             const res = await fetch(`${baseUrl}/admin/restore`, {
                                                                 method: 'POST',

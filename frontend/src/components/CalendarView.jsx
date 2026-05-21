@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const CalendarView = ({ orders, onSelectOrder }) => {
+    const { user } = useAuth();
     const [currentDate, setCurrentDate] = useState(new Date());
+    const isConstructor = user?.role === 'constructor';
 
     // Helper to get days in month
     const getDaysInMonth = (date) => {
@@ -45,10 +48,7 @@ const CalendarView = ({ orders, onSelectOrder }) => {
         const dayEvents = [];
 
         orders.forEach(order => {
-            // Deadline (Red) w/ Check for valid date
             if (order.date_design_deadline === dateStr) {
-                // Only show if not fully paid/done? Or always?
-                // Always show deadlines.
                 dayEvents.push({
                     type: 'deadline',
                     order,
@@ -56,7 +56,14 @@ const CalendarView = ({ orders, onSelectOrder }) => {
                 });
             }
 
-            // Installation (Green) - Actual/Constructor
+            if (order.date_to_work === dateStr) {
+                dayEvents.push({
+                    type: 'handoff',
+                    order,
+                    label: `В роботу #${order.id}`
+                });
+            }
+
             if (order.date_installation === dateStr) {
                 dayEvents.push({
                     type: 'installation',
@@ -65,8 +72,7 @@ const CalendarView = ({ orders, onSelectOrder }) => {
                 });
             }
 
-            // Planned Installation (Purple) - Manager
-            if (order.date_installation_plan === dateStr) {
+            if (!isConstructor && order.date_installation_plan === dateStr) {
                 dayEvents.push({
                     type: 'plan',
                     order,
@@ -75,7 +81,14 @@ const CalendarView = ({ orders, onSelectOrder }) => {
             }
         });
 
-        return dayEvents;
+        const eventOrder = {
+            deadline: 0,
+            handoff: 1,
+            plan: 2,
+            installation: 3,
+        };
+
+        return dayEvents.sort((a, b) => eventOrder[a.type] - eventOrder[b.type]);
     };
 
     return (
@@ -131,13 +144,21 @@ const CalendarView = ({ orders, onSelectOrder }) => {
                                         className={`text-[10px] px-2 py-1 rounded cursor-pointer font-bold truncate transition hover:scale-105
                                             ${evt.type === 'deadline'
                                                 ? 'bg-red-100 text-red-700 border border-red-200'
+                                                : evt.type === 'handoff'
+                                                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
                                                 : evt.type === 'plan'
                                                     ? 'bg-purple-100 text-purple-700 border border-purple-200'
                                                     : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}
                                         `}
-                                        title={`${evt.order.name} (${evt.type === 'deadline' ? 'Дедлайн' : evt.type === 'plan' ? 'План. монтаж' : 'Монтаж'})`}
+                                        title={`${evt.order.name} (${evt.type === 'deadline' ? 'Дедлайн здачі' : evt.type === 'handoff' ? 'Передано в роботу' : evt.type === 'plan' ? 'План. монтаж' : 'Монтаж завершено'})`}
                                     >
-                                        {evt.type === 'deadline' ? '⏰' : evt.type === 'plan' ? '📅' : '🛠'} #{evt.order.id} {evt.order.name}
+                                        {evt.type === 'deadline'
+                                            ? '⏰'
+                                            : evt.type === 'handoff'
+                                                ? '📤'
+                                                : evt.type === 'plan'
+                                                    ? '📅'
+                                                    : '🛠'} #{evt.order.id} {evt.order.name}
                                     </div>
                                 ))}
                             </div>
@@ -147,9 +168,12 @@ const CalendarView = ({ orders, onSelectOrder }) => {
             </div>
 
             <div className="mt-4 flex gap-4 text-xs font-bold text-slate-500 cursor-default">
-                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-400"></span> Дедлайн (Конструктив)</div>
-                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-purple-400"></span> План монтажу (Менеджер)</div>
-                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-400"></span> Здача монтажу</div>
+                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-400"></span> Дедлайн здачі</div>
+                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-400"></span> Передано в роботу</div>
+                {!isConstructor && (
+                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-purple-400"></span> План монтажу</div>
+                )}
+                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-400"></span> Монтаж завершено</div>
             </div>
         </div>
     );

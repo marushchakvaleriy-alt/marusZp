@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gantt Preview - Informative</title>
+  <style>
+    :root {
+      --bg: #eef5f8; --panel: rgba(255,255,255,.9); --line: #d9e4ec; --text: #1e3048; --muted: #6b7f95;
+      --blue: #397ef6; --amber: #f0ac2d; --violet: #8a69eb; --green: #33b57d; --red: #e25151; --ink: #142334;
+      --shadow: 0 18px 38px rgba(31,58,88,.08); --week: 12.5%;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; font-family: "Manrope","Segoe UI Variable","Trebuchet MS",sans-serif; color: var(--text);
+      background:
+        radial-gradient(800px 340px at 0% 0%, rgba(67,181,142,.18) 0%, transparent 58%),
+        radial-gradient(900px 380px at 100% 0%, rgba(57,126,246,.16) 0%, transparent 58%),
+        linear-gradient(180deg, var(--bg) 0%, #f9fbfd 100%);
+    }
+    .page { width: min(1660px, 96vw); margin: 22px auto 42px; }
+    .panel { border: 1px solid rgba(217,228,236,.88); background: var(--panel); border-radius: 28px; box-shadow: var(--shadow); }
+    .hero { display: grid; grid-template-columns: 1.4fr .9fr; gap: 18px; margin-bottom: 16px; }
+    .hero-main { padding: 24px 28px; }
+    .eyebrow, .chip, .tag, .status { display: inline-flex; align-items: center; border-radius: 999px; font-weight: 900; }
+    .eyebrow { padding: 8px 13px; border: 1px solid #cfe0ee; background: #ecf4ff; color: #2d5f8c; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    h1 { margin-top: 14px; font-size: clamp(2rem, 2.7vw, 3.1rem); line-height: .98; letter-spacing: -.04em; font-style: italic; font-weight: 900; color: var(--ink); }
+    .hero-main p { margin-top: 14px; max-width: 66ch; font-size: 15px; line-height: 1.6; color: var(--muted); }
+    .hero-points { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .hero-point { padding: 9px 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.72); font-size: 12px; font-weight: 800; }
+    .hero-side { padding: 18px; display: grid; gap: 12px; }
+    .story { padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.76); }
+    .story strong { display: block; margin-bottom: 6px; color: var(--ink); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .story span { font-size: 14px; line-height: 1.5; color: var(--muted); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .chip { gap: 8px; padding: 10px 14px; border: 1px solid var(--line); background: rgba(255,255,255,.72); font-size: 13px; color: var(--text); }
+    .chip.active { color: #fff; background: linear-gradient(135deg, #367bf2, #2259cf); border-color: transparent; }
+    .chip.search { margin-left: auto; min-width: 320px; justify-content: flex-start; color: #93a4b7; }
+    .head { padding: 20px 22px 16px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(246,250,252,.86)); }
+    .head-top { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+    .head h2 { font-size: 28px; line-height: 1.05; letter-spacing: -.03em; font-style: italic; font-weight: 900; color: var(--ink); }
+    .head p { margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .note { padding: 10px 14px; border-radius: 16px; border: 1px solid #d6e6d9; background: #eff9f3; color: #2f6f53; font-size: 12px; font-weight: 800; max-width: 400px; }
+    .summary { margin-top: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .sum { padding: 14px 15px; border-radius: 18px; border: 1px solid var(--line); background: rgba(255,255,255,.82); }
+    .sum small, .box small, .next small, .dur small { display: block; color: var(--muted); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+    .sum strong { display: block; margin-top: 4px; color: var(--ink); font-size: 28px; font-weight: 900; letter-spacing: -.04em; }
+    .sum span { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .schedule { padding: 16px; overflow-x: auto; }
+    .grid { min-width: 1480px; display: grid; grid-template-columns: 420px 1fr; gap: 14px; }
+    .timeline { position: relative; height: 88px; border-radius: 22px; border: 1px solid var(--line);
+      background:
+        repeating-linear-gradient(to right, transparent 0, transparent calc(var(--week) - 1px), rgba(217,228,236,.82) calc(var(--week) - 1px), rgba(217,228,236,.82) var(--week)),
+        linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,248,251,.96));
+    }
+    .month, .tick { position: absolute; color: var(--muted); font-weight: 900; white-space: nowrap; }
+    .month { top: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .tick { bottom: 12px; transform: translateX(-50%); font-size: 11px; }
+    .row { display: contents; }
+    .card, .track { border-radius: 22px; border: 1px solid var(--line); background: rgba(255,255,255,.92); }
+    .card { padding: 18px; display: grid; gap: 14px; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .top h3 { font-size: 30px; line-height: .96; letter-spacing: -.04em; color: var(--ink); font-weight: 900; }
+    .subtitle { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .status { padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+    .ok { background: #e6f8f0; color: #226848; border: 1px solid #bde6d1; } .warn { background: #fff4df; color: #926114; border: 1px solid #f2d7a4; }
+    .bad { background: #ffe9e8; color: #b23535; border: 1px solid #f2c4c4; }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag { padding: 7px 10px; border: 1px solid var(--line); background: #f5f9fc; color: #546b80; font-size: 11px; text-transform: uppercase; }
+    .info { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .box { padding: 11px 12px; border-radius: 14px; border: 1px solid var(--line); background: #fbfdff; }
+    .box strong, .dur strong, .next strong { display: block; margin-top: 4px; color: var(--ink); font-weight: 900; }
+    .box strong { font-size: 14px; }
+    .durations { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .dur { padding: 10px 8px; text-align: center; border-radius: 14px; border: 1px solid var(--line); background: #fff; }
+    .dur strong { font-size: 18px; }
+    .next { padding: 13px 14px; border-radius: 16px; border: 1px solid #d5e0ea; background: linear-gradient(180deg, #f4f8fc, #fbfdff); }
+    .next strong { font-size: 15px; line-height: 1.45; }
+    .track {
+      position: relative; min-height: 246px; padding: 24px 16px 18px;
+      background:
+        repeating-linear-gradient(to right, transparent 0, transparent calc(var(--week) - 1px), rgba(217,228,236,.88) calc(var(--week) - 1px), rgba(217,228,236,.88) var(--week)),
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(247,250,252,.98));
+    }
+    .track::before { content: ""; position: absolute; left: 16px; right: 16px; top: 38px; height: 2px; background: rgba(217,228,236,.65); }
+    .today { position: absolute; top: 18px; bottom: 16px; width: 2px; background: rgba(226,81,81,.92); box-shadow: 0 0 0 4px rgba(226,81,81,.08); }
+    .today-label { position: absolute; top: 4px; transform: translateX(-50%); color: var(--red); font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+    .lane { position: absolute; left: 16px; right: 16px; height: 34px; display: flex; align-items: center; }
+    .lane b { position: absolute; left: 0; top: -18px; color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+    .bar {
+      position: absolute; height: 16px; border-radius: 999px; box-shadow: 0 10px 18px rgba(20,35,52,.12);
+      display: flex; align-items: center; justify-content: center; padding: 0 11px; color: #fff; font-size: 11px; font-weight: 900; white-space: nowrap;
+    }
+    .c { background: var(--blue); } .k { background: var(--amber); } .p { background: var(--violet); } .m { background: var(--green); }
+    .risk { position: absolute; height: 28px; border-radius: 14px; background: linear-gradient(90deg, rgba(226,81,81,.18), rgba(226,81,81,.04)); border: 1px dashed rgba(226,81,81,.35); }
+    .risk-note { position: absolute; padding: 7px 10px; border-radius: 12px; background: #fff6f6; border: 1px solid #f2cbcb; color: #ab3d3d; font-size: 11px; font-weight: 800; line-height: 1.35; }
+    .mark { position: absolute; width: 14px; height: 14px; border-radius: 999px; border: 2px solid #fff; box-shadow: 0 7px 14px rgba(20,35,52,.14); }
+    .ml { position: absolute; transform: translateX(-50%); color: var(--muted); font-size: 10px; font-weight: 900; white-space: nowrap; }
+    .work { background: #2d3bda; } .deadline { background: #d83f3f; } .plan { background: #0d8a63; } .fact { background: #133f32; }
+    .legend { padding: 14px 18px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,.82); display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .legend-items { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+    .li { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .sw { width: 12px; height: 12px; border-radius: 999px; }
+    .legend-note { max-width: 430px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    @media (max-width: 1240px) { .hero { grid-template-columns: 1fr; } .summary { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 820px) { .page { width: 99vw; margin: 10px auto 26px; } .chip.search { margin-left: 0; min-width: 0; width: 100%; } .summary { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="panel hero-main">
+        <div class="eyebrow">Тестовий HTML перед переробкою</div>
+        <h1>Інформативний Gantt, де видно не тільки смужки, а й сенс для менеджера</h1>
+        <p>Цей макет показує інший підхід: зверху коротка диспетчерська зведенка, у кожному рядку є відповідальні, ключові дати, статус ризику і наступна дія, а шкала справа лише підтверджує картину по етапах.</p>
+        <div class="hero-points">
+          <div class="hero-point">Одразу видно хто веде замовлення</div>
+          <div class="hero-point">Дедлайн і старт монтажу не ховаються</div>
+          <div class="hero-point">Ризик позначений окремо, а не тільки кольором</div>
+          <div class="hero-point">Рядок читається навіть без кліку в картку</div>
+        </div>
+      </div>
+      <div class="panel hero-side">
+        <div class="story"><strong>Що змінено ідеологічно</strong><span>Gantt тут не головний сам по собі. Головне питання: що зараз критичне, хто відповідальний і який наступний крок по замовленню.</span></div>
+        <div class="story"><strong>Чому цей формат сильніший</strong><span>Статус, ризик, дата монтажу і вузьке місце винесені в ліву колонку, а таймлайн справа працює як візуальне підтвердження.</span></div>
+        <div class="story"><strong>Що переносимо потім у React</strong><span>Таймлайн по тижнях, маркери дедлайну, компактний блок редагування тривалостей і верхню диспетчерську зведенку.</span></div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <div class="chip active">Новий формат Gantt</div>
+      <div class="chip">Активні</div>
+      <div class="chip">Всі конструктори</div>
+      <div class="chip">Квітень - травень 2026</div>
+      <div class="chip">Показувати ризики</div>
+      <div class="chip search">Пошук по ID, назві, менеджеру або конструктору...</div>
+    </div>
+
+    <section class="panel">
+      <div class="head">
+        <div class="head-top">
+          <div>
+            <h2>Планування Gantt у форматі диспетчерської дошки</h2>
+            <p>Мета цього варіанту: щоб по кожному замовленню одразу читалися відповідальний, вузьке місце, ключові дати і загальний стан графіка.</p>
+          </div>
+          <div class="note">Тестова думка: якщо цей напрям заходить, наступним кроком переносимо саме таку композицію в живий екран.</div>
+        </div>
+        <div class="summary">
+          <div class="sum"><small>Активних замовлень</small><strong>12</strong><span>8 у нормі, 3 з ризиком, 1 чекає підтвердження монтажу.</span></div>
+          <div class="sum"><small>Найближчий вузький момент</small><strong>09.04</strong><span>Комплектація по двох замовленнях збігається в один день.</span></div>
+          <div class="sum"><small>Критичні дедлайни</small><strong>2</strong><span>Є два рядки, де монтаж уже надто близько до дедлайну конструктиву.</span></div>
+          <div class="sum"><small>Монтажі цього тижня</small><strong>4</strong><span>Найщільніші дні: 16.04 і 18.04, варто перевірити бригади.</span></div>
+        </div>
+      </div>
+
+      <div class="schedule">
+        <div class="grid">
+          <div></div>
+          <div class="timeline">
+            <div class="month" style="left:2%;">Квітень</div>
+            <div class="month" style="left:64%;">Травень</div>
+            <div class="tick" style="left:0%;">04.04</div><div class="tick" style="left:12.5%;">11.04</div><div class="tick" style="left:25%;">18.04</div><div class="tick" style="left:37.5%;">25.04</div>
+            <div class="tick" style="left:50%;">02.05</div><div class="tick" style="left:62.5%;">09.05</div><div class="tick" style="left:75%;">16.05</div><div class="tick" style="left:87.5%;">23.05</div><div class="tick" style="left:100%;">30.05</div>
+          </div>
+
+          <div class="row">
+            <article class="card">
+              <div class="top"><div><h3>#53 Loft Wood</h3><div class="subtitle">Кухня + шафа. Велике замовлення з монтажем у два етапи.</div></div><div class="status ok">У графіку</div></div>
+              <div class="tags"><div class="tag">Менеджер: Романюк</div><div class="tag">Конструктор: Білоган</div><div class="tag">Цех: Основний</div></div>
+              <div class="info">
+                <div class="box"><small>Передано в роботу</small><strong>04.04.2026</strong></div><div class="box"><small>Дедлайн конструктиву</small><strong>08.04.2026</strong></div>
+                <div class="box"><small>План старту монтажу</small><strong>16.04.2026</strong></div><div class="box"><small>Факт монтажу</small><strong>ще не здано</strong></div>
+              </div>
+              <div class="durations"><div class="dur"><small>Констр.</small><strong>5д</strong></div><div class="dur"><small>Компл.</small><strong>3д</strong></div><div class="dur"><small>Предзб.</small><strong>2д</strong></div><div class="dur"><small>Монтаж</small><strong>4д</strong></div></div>
+              <div class="next"><small>Наступна дія</small><strong>Підтвердити комплектацію до 11.04, щоб монтаж 16.04 стартував без зсуву.</strong></div>
+            </article>
+            <div class="track">
+              <div class="today" style="left:calc(25% + 16px);"></div><div class="today-label" style="left:calc(25% + 16px);">Сьогодні</div>
+              <div class="lane" style="top:26px;"><b>Конструктив</b><div class="bar c" style="left:0%;width:16%;">04.04 - 08.04</div></div>
+              <div class="lane" style="top:72px;"><b>Комплектація</b><div class="bar k" style="left:18%;width:10%;">09.04 - 11.04</div></div>
+              <div class="lane" style="top:118px;"><b>Предзбірка</b><div class="bar p" style="left:30%;width:7%;">12.04 - 13.04</div></div>
+              <div class="lane" style="top:164px;"><b>Монтаж</b><div class="bar m" style="left:40%;width:18%;">16.04 - 19.04</div></div>
+              <div class="mark work" style="left:0%;top:18px;"></div><div class="ml" style="left:0%;top:18px;">04.04 робота</div>
+              <div class="mark deadline" style="left:16%;top:18px;"></div><div class="ml" style="left:16%;top:18px;">08.04 дедлайн</div>
+              <div class="mark plan" style="left:40%;top:154px;"></div><div class="ml" style="left:40%;top:154px;">16.04 монтаж</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <article class="card">
+              <div class="top"><div><h3>#41 Bianko Hall</h3><div class="subtitle">Ресепшн + декоративні панелі. Є тиск по строках комплектації.</div></div><div class="status bad">Критичний ризик</div></div>
+              <div class="tags"><div class="tag">Менеджер: Карпінський</div><div class="tag">Конструктор: Левицький</div><div class="tag">Потребує уваги</div></div>
+              <div class="info">
+                <div class="box"><small>Передано в роботу</small><strong>06.04.2026</strong></div><div class="box"><small>Дедлайн конструктиву</small><strong>10.04.2026</strong></div>
+                <div class="box"><small>План старту монтажу</small><strong>18.04.2026</strong></div><div class="box"><small>Факт монтажу</small><strong>ще не здано</strong></div>
+              </div>
+              <div class="durations"><div class="dur"><small>Констр.</small><strong>4д</strong></div><div class="dur"><small>Компл.</small><strong>4д</strong></div><div class="dur"><small>Предзб.</small><strong>1д</strong></div><div class="dur"><small>Монтаж</small><strong>4д</strong></div></div>
+              <div class="next"><small>Наступна дія</small><strong>Сьогодні підтвердити закупівлю фурнітури. Без цього монтаж 18.04 з високим шансом зсунеться.</strong></div>
+            </article>
+            <div class="track">
+              <div class="today" style="left:calc(25% + 16px);"></div><div class="today-label" style="left:calc(25% + 16px);">Сьогодні</div>
+              <div class="risk" style="left:calc(48% + 16px);top:160px;width:18%;"></div><div class="risk-note" style="left:calc(61% + 16px);top:194px;">Монтаж стоїть занадто близько до проблемної комплектації.</div>
+              <div class="lane" style="top:26px;"><b>Конструктив</b><div class="bar c" style="left:6%;width:13%;">06.04 - 10.04</div></div>
+              <div class="lane" style="top:72px;"><b>Комплектація</b><div class="bar k" style="left:21%;width:13%;">11.04 - 14.04</div></div>
+              <div class="lane" style="top:118px;"><b>Предзбірка</b><div class="bar p" style="left:36%;width:4.5%;">15.04</div></div>
+              <div class="lane" style="top:164px;"><b>Монтаж</b><div class="bar m" style="left:46%;width:16%;">18.04 - 21.04</div></div>
+              <div class="mark work" style="left:6%;top:18px;"></div><div class="ml" style="left:6%;top:18px;">06.04 робота</div>
+              <div class="mark deadline" style="left:19%;top:18px;"></div><div class="ml" style="left:19%;top:18px;">10.04 дедлайн</div>
+              <div class="mark plan" style="left:46%;top:154px;"></div><div class="ml" style="left:46%;top:154px;">18.04 монтаж</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <article class="card">
+              <div class="top"><div><h3>#38 Artline Office</h3><div class="subtitle">Офісні меблі. Основна частина завершена, залишився факт монтажу та закриття.</div></div><div class="status warn">Фінішний етап</div></div>
+              <div class="tags"><div class="tag">Менеджер: Кравець</div><div class="tag">Конструктор: Савчук</div><div class="tag">Очікує закриття</div></div>
+              <div class="info">
+                <div class="box"><small>Передано в роботу</small><strong>03.04.2026</strong></div><div class="box"><small>Дедлайн конструктиву</small><strong>09.04.2026</strong></div>
+                <div class="box"><small>План старту монтажу</small><strong>20.04.2026</strong></div><div class="box"><small>Факт монтажу</small><strong>24.04.2026</strong></div>
+              </div>
+              <div class="durations"><div class="dur"><small>Констр.</small><strong>6д</strong></div><div class="dur"><small>Компл.</small><strong>4д</strong></div><div class="dur"><small>Предзб.</small><strong>2д</strong></div><div class="dur"><small>Монтаж</small><strong>5д</strong></div></div>
+              <div class="next"><small>Наступна дія</small><strong>Звірити акт монтажу і перевести замовлення в завершені після підписання документів.</strong></div>
+            </article>
+            <div class="track">
+              <div class="today" style="left:calc(25% + 16px);"></div><div class="today-label" style="left:calc(25% + 16px);">Сьогодні</div>
+              <div class="lane" style="top:26px;"><b>Конструктив</b><div class="bar c" style="left:0%;width:18%;">03.04 - 09.04</div></div>
+              <div class="lane" style="top:72px;"><b>Комплектація</b><div class="bar k" style="left:21%;width:13%;">10.04 - 13.04</div></div>
+              <div class="lane" style="top:118px;"><b>Предзбірка</b><div class="bar p" style="left:36%;width:7%;">14.04 - 15.04</div></div>
+              <div class="lane" style="top:164px;"><b>Монтаж</b><div class="bar m" style="left:50%;width:20%;">20.04 - 24.04</div></div>
+              <div class="mark work" style="left:0%;top:18px;"></div><div class="ml" style="left:0%;top:18px;">03.04 робота</div>
+              <div class="mark deadline" style="left:18%;top:18px;"></div><div class="ml" style="left:18%;top:18px;">09.04 дедлайн</div>
+              <div class="mark plan" style="left:50%;top:154px;"></div><div class="ml" style="left:50%;top:154px;">20.04 старт</div>
+              <div class="mark fact" style="left:70%;top:154px;"></div><div class="ml" style="left:70%;top:154px;">24.04 факт</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-items">
+          <div class="li"><span class="sw" style="background:#2d3bda"></span>Передано в роботу</div>
+          <div class="li"><span class="sw" style="background:#d83f3f"></span>Дедлайн конструктиву</div>
+          <div class="li"><span class="sw" style="background:#397ef6"></span>Конструктив</div>
+          <div class="li"><span class="sw" style="background:#f0ac2d"></span>Комплектація</div>
+          <div class="li"><span class="sw" style="background:#8a69eb"></span>Предзбірка</div>
+          <div class="li"><span class="sw" style="background:#33b57d"></span>Монтаж</div>
+          <div class="li"><span class="sw" style="background:#133f32"></span>Факт монтажу</div>
+        </div>
+        <div class="legend-note">Логіка цього тесту: по рядку замовлення потрібно читати управлінське рішення, а не лише геометрію етапів. Якщо формат підходить, перенесу його у React-компонент і прив’яжу до реальних даних.</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

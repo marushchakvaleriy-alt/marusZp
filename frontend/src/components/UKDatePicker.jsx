@@ -7,13 +7,13 @@ import { uk } from 'date-fns/locale/uk';
 registerLocale('uk', uk);
 
 // Custom Input for consistent styling
-const CustomInput = forwardRef(({ value, onClick, className, placeholder }, ref) => (
-    <button type="button" className={className} onClick={onClick} ref={ref}>
+const CustomInput = forwardRef(({ value, onClick, className, placeholder, disabled }, ref) => (
+    <button type="button" className={className} onClick={onClick} ref={ref} disabled={disabled}>
         {value || placeholder || "__. __. ____"}
     </button>
 ));
 
-const UKDatePicker = ({ selected, onChange, placeholder, className, isRedDeadline }) => {
+const UKDatePicker = ({ selected, onChange, placeholder, className, isRedDeadline, disabled, ...props }) => {
     return (
         <DatePicker
             selected={selected ? new Date(selected) : null}
@@ -30,11 +30,14 @@ const UKDatePicker = ({ selected, onChange, placeholder, className, isRedDeadlin
             placeholderText={placeholder}
             customInput={
                 <CustomInput
+                    disabled={disabled}
                     className={className || `w-full p-1 text-[12px] font-bold bg-white border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${isRedDeadline ? 'border-red-400 text-red-600' : 'border-slate-200 text-slate-700'}`}
                 />
             }
             popperClassName="z-50"
             portalId="root-portal" // Ensure it renders above other elements if needed
+            disabled={disabled}
+            {...props}
         />
     );
 };

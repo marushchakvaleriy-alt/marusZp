@@ -11,7 +11,7 @@ from database import get_session
 from models import Order, OrderCreate, OrderRead, OrderUpdate, Deduction, DeductionCreate, DeductionRead, DeductionUpdate, ActivityLog, ActivityLogRead, OrderFile, OrderFileCreate, OrderFileRead, User, UserCreate, UserRead, UserUpdate, OrderCalculationHistoryItemRead
 from payments import Payment, PaymentAllocation, PaymentRead
 from payment_service import PaymentDistributionService
-from financial_logic import build_constructor_financial_snapshot, resolve_constructor_base_financials
+from financial_logic import build_constructor_financial_snapshot, resolve_constructor_base_financials, calculate_manager_financials
 from pydantic import BaseModel
 from auth import get_current_user, get_admin_user, get_super_admin_user, get_manager_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 from settings import load_settings, save_settings, Settings
@@ -45,6 +45,11 @@ def is_payment_visible_to_constructor(
     if payment.constructor_id == constructor_id:
         return True
 
+    if payment.manual_order_id:
+        manual_order = session.get(Order, payment.manual_order_id)
+        if manual_order and manual_order.constructor_id == constructor_id:
+            return True
+
     allocations = session.exec(
         select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
     ).all()
@@ -62,6 +67,69 @@ def is_payment_visible_to_constructor(
         .limit(1)
     ).first()
     return own_order is not None
+
+
+def is_payment_visible_to_manager(
+    session: Session,
+    payment: Payment,
+    manager_id: int
+) -> bool:
+    if payment.manager_id == manager_id:
+        return True
+
+    if payment.manual_order_id:
+        manual_order = session.get(Order, payment.manual_order_id)
+        if manual_order and manual_order.manager_id == manager_id:
+            return True
+
+    allocations = session.exec(
+        select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
+    ).all()
+    if not allocations:
+        return False
+
+    order_ids = [a.order_id for a in allocations]
+    if not order_ids:
+        return False
+
+    own_order = session.exec(
+        select(Order.id)
+        .where(Order.id.in_(order_ids))
+        .where(Order.manager_id == manager_id)
+        .limit(1)
+    ).first()
+    return own_order is not None
+
+
+def filter_allocations_for_user(
+    session: Session,
+    allocations: List[PaymentAllocation],
+    current_user: User
+) -> List[PaymentAllocation]:
+    if current_user.role in ADMIN_ROLES:
+        return allocations
+
+    order_ids = [allocation.order_id for allocation in allocations]
+    if not order_ids:
+        return []
+
+    if current_user.role == "constructor":
+        visible_order_ids = set(session.exec(
+            select(Order.id)
+            .where(Order.id.in_(order_ids))
+            .where(Order.constructor_id == current_user.id)
+        ).all())
+        return [allocation for allocation in allocations if allocation.order_id in visible_order_ids]
+
+    if current_user.role == "manager":
+        visible_order_ids = set(session.exec(
+            select(Order.id)
+            .where(Order.id.in_(order_ids))
+            .where(Order.manager_id == current_user.id)
+        ).all())
+        return [allocation for allocation in allocations if allocation.order_id in visible_order_ids]
+
+    return []
 
 # --- AUTH ROUTES ---
 
@@ -140,10 +208,10 @@ def delete_user(user_id: int, current_user: User = Depends(get_admin_user), sess
     
     # Logic: If user is deleted, we should UNLINK them from orders and payments
     # (Setting to NULL instead of deleting orders/money)
-    session.exec(text('UPDATE "order" SET constructor_id = NULL WHERE constructor_id = :user_id'), {"user_id": user_id})
-    session.exec(text('UPDATE "order" SET manager_id = NULL WHERE manager_id = :user_id'), {"user_id": user_id})
-    session.exec(text("UPDATE payment SET constructor_id = NULL WHERE constructor_id = :user_id"), {"user_id": user_id})
-    session.exec(text("UPDATE payment SET manager_id = NULL WHERE manager_id = :user_id"), {"user_id": user_id})
+    session.execute(text('UPDATE "order" SET constructor_id = NULL WHERE constructor_id = :user_id'), {"user_id": user_id})
+    session.execute(text('UPDATE "order" SET manager_id = NULL WHERE manager_id = :user_id'), {"user_id": user_id})
+    session.execute(text("UPDATE payment SET constructor_id = NULL WHERE constructor_id = :user_id"), {"user_id": user_id})
+    session.execute(text("UPDATE payment SET manager_id = NULL WHERE manager_id = :user_id"), {"user_id": user_id})
     
     session.delete(user_to_delete)
     session.commit()
@@ -175,6 +243,13 @@ PAYMENT_SCHEMA_PATCHES = [
 
 ORDER_PLANNING_SCHEMA_PATCHES = [
     (
+        "date_manager_handover",
+        (
+            'ALTER TABLE "order" ADD COLUMN date_manager_handover DATE',
+            "ALTER TABLE order ADD COLUMN date_manager_handover DATE",
+        ),
+    ),
+    (
         "constructive_days",
         (
             'ALTER TABLE "order" ADD COLUMN constructive_days INTEGER DEFAULT 5',
@@ -200,6 +275,72 @@ ORDER_PLANNING_SCHEMA_PATCHES = [
         (
             'ALTER TABLE "order" ADD COLUMN installation_days INTEGER DEFAULT 3',
             "ALTER TABLE order ADD COLUMN installation_days INTEGER DEFAULT 3",
+        ),
+    ),
+    (
+        "constructive_start_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN constructive_start_date DATE',
+            "ALTER TABLE order ADD COLUMN constructive_start_date DATE",
+        ),
+    ),
+    (
+        "constructive_end_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN constructive_end_date DATE',
+            "ALTER TABLE order ADD COLUMN constructive_end_date DATE",
+        ),
+    ),
+    (
+        "complectation_start_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN complectation_start_date DATE',
+            "ALTER TABLE order ADD COLUMN complectation_start_date DATE",
+        ),
+    ),
+    (
+        "complectation_end_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN complectation_end_date DATE',
+            "ALTER TABLE order ADD COLUMN complectation_end_date DATE",
+        ),
+    ),
+    (
+        "preassembly_start_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN preassembly_start_date DATE',
+            "ALTER TABLE order ADD COLUMN preassembly_start_date DATE",
+        ),
+    ),
+    (
+        "preassembly_end_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN preassembly_end_date DATE',
+            "ALTER TABLE order ADD COLUMN preassembly_end_date DATE",
+        ),
+    ),
+    (
+        "installation_start_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN installation_start_date DATE',
+            "ALTER TABLE order ADD COLUMN installation_start_date DATE",
+        ),
+    ),
+    (
+        "installation_end_date",
+        (
+            'ALTER TABLE "order" ADD COLUMN installation_end_date DATE',
+            "ALTER TABLE order ADD COLUMN installation_end_date DATE",
+        ),
+    ),
+]
+
+DEDUCTION_SCHEMA_PATCHES = [
+    (
+        "target_role",
+        (
+            "ALTER TABLE deduction ADD COLUMN target_role VARCHAR DEFAULT 'constructor'",
+            "UPDATE deduction SET target_role = 'constructor' WHERE target_role IS NULL OR target_role = ''",
         ),
     ),
 ]
@@ -244,6 +385,26 @@ def ensure_order_planning_schema(session: Session):
                     break
 
 
+def ensure_deduction_schema(session: Session):
+    """Ensure deduction target columns exist on older databases."""
+    for column_name, sql_steps in DEDUCTION_SCHEMA_PATCHES:
+        try:
+            session.exec(text(f"SELECT {column_name} FROM deduction LIMIT 1"))
+            continue
+        except Exception:
+            session.rollback()
+
+        for sql in sql_steps:
+            try:
+                session.connection().execute(text(sql))
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                err = str(e).lower()
+                if "already exists" in err or "duplicate column" in err:
+                    continue
+
+
 def log_activity(session: Session, action_type: str, description: str, details: Optional[str] = None):
     try:
         log = ActivityLog(action_type=action_type, description=description, details=details)
@@ -255,7 +416,7 @@ def log_activity(session: Session, action_type: str, description: str, details: 
 @router.get("/fix-db")
 def fix_database_schema(
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)
+    current_user: User = Depends(get_super_admin_user)
 ):
     logs = []
     
@@ -309,6 +470,10 @@ def fix_database_schema(
     logs.append("Attempting to add date_design_deadline...")
     run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_design_deadline DATE')
     run_sql('ALTER TABLE order ADD COLUMN date_design_deadline DATE')
+
+    logs.append("Attempting to add date_manager_handover...")
+    run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_manager_handover DATE')
+    run_sql('ALTER TABLE order ADD COLUMN date_manager_handover DATE')
     
     # 2b. Planned Installation Date (Manager View)
     logs.append("Attempting to add date_installation_plan...")
@@ -445,6 +610,8 @@ def fix_database_schema(
         # v1.6 Manager Plan
         run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_installation_plan DATE')
         run_sql('ALTER TABLE order ADD COLUMN date_installation_plan DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS date_manager_handover DATE')
+        run_sql('ALTER TABLE order ADD COLUMN date_manager_handover DATE')
         run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS constructive_days INTEGER DEFAULT 5')
         run_sql('ALTER TABLE order ADD COLUMN constructive_days INTEGER DEFAULT 5')
         run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS complectation_days INTEGER DEFAULT 2')
@@ -453,6 +620,22 @@ def fix_database_schema(
         run_sql('ALTER TABLE order ADD COLUMN preassembly_days INTEGER DEFAULT 1')
         run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS installation_days INTEGER DEFAULT 3')
         run_sql('ALTER TABLE order ADD COLUMN installation_days INTEGER DEFAULT 3')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS constructive_start_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN constructive_start_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS constructive_end_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN constructive_end_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS complectation_start_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN complectation_start_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS complectation_end_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN complectation_end_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS preassembly_start_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN preassembly_start_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS preassembly_end_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN preassembly_end_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS installation_start_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN installation_start_date DATE')
+        run_sql('ALTER TABLE "order" ADD COLUMN IF NOT EXISTS installation_end_date DATE')
+        run_sql('ALTER TABLE order ADD COLUMN installation_end_date DATE')
     except:
         pass
 
@@ -491,7 +674,7 @@ def fix_database_schema(
 @router.get("/logs", response_model=List[ActivityLogRead])
 def get_logs(
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_admin_user)
 ):
     return session.exec(select(ActivityLog).order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())).all()
 
@@ -508,14 +691,21 @@ def create_order(order: OrderCreate, session: Session = Depends(get_session), cu
         db_order.installation_days = max(1, min(60, int(db_order.installation_days or 3)))
         
         # Logic:
-        # - Admin/Manager can assign anyone (via input)
         # - Constructor is forced to assign themselves
+        # - Manager can choose constructor, but the manager on the order is always themselves
         if current_user.role == 'constructor':
             db_order.constructor_id = current_user.id
             db_order.manager_id = None
             db_order.fixed_bonus = None
             db_order.custom_stage1_percent = None
             db_order.custom_stage2_percent = None
+        elif current_user.role == 'manager':
+            db_order.manager_id = current_user.id
+            db_order.fixed_bonus = None
+            db_order.custom_stage1_percent = None
+            db_order.custom_stage2_percent = None
+            if db_order.constructor_id and not db_order.date_manager_handover:
+                db_order.date_manager_handover = date.today()
             
         session.add(db_order)
         session.commit()
@@ -669,6 +859,7 @@ def get_order_calculation_history(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    ensure_deduction_schema(session)
     order = session.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -734,7 +925,7 @@ def get_order_calculation_history(
     if constructor:
         constructor_name = constructor.full_name or constructor.username
         add_event(
-            order.date_received,
+            order.date_manager_handover or order.date_received,
             5,
             "constructor_assigned",
             "Замовлення передано конструктору",
@@ -765,15 +956,17 @@ def get_order_calculation_history(
         )
 
     for deduction in deductions:
+        target_role = getattr(deduction, "target_role", None) or "constructor"
+        target_label = "менеджеру" if target_role == "manager" else "конструктору"
         add_event(
             deduction.date_created,
             30,
             "deduction_added",
             "Додано штраф",
-            f"{deduction.description}. Штраф зменшує невиплачену суму по замовленню.",
+            f"{deduction.description}. Штраф нараховано {target_label}.",
             amount=deduction.amount,
             stage="deduction",
-            extra={"deduction_id": deduction.id},
+            extra={"deduction_id": deduction.id, "target_role": target_role},
         )
         if deduction.is_paid and deduction.date_paid:
             add_event(
@@ -781,10 +974,10 @@ def get_order_calculation_history(
                 31,
                 "deduction_paid",
                 "Штраф погашено",
-                f"Штраф '{deduction.description}' більше не зменшує борг по замовленню.",
+                f"Штраф '{deduction.description}' для {target_label} більше не впливає на борг.",
                 amount=deduction.amount,
                 stage="deduction",
-                extra={"deduction_id": deduction.id},
+                extra={"deduction_id": deduction.id, "target_role": target_role},
             )
 
     for allocation in allocations:
@@ -849,9 +1042,11 @@ def get_order_calculation_history(
             elif event["stage"] == "final":
                 state["stage2_active"] = True
         elif event["event_type"] == "deduction_added":
-            state["unpaid_deductions"] += event["amount"]
+            if (event.get("extra") or {}).get("target_role", "constructor") != "manager":
+                state["unpaid_deductions"] += event["amount"]
         elif event["event_type"] == "deduction_paid":
-            state["unpaid_deductions"] = max(0.0, state["unpaid_deductions"] - event["amount"])
+            if (event.get("extra") or {}).get("target_role", "constructor") != "manager":
+                state["unpaid_deductions"] = max(0.0, state["unpaid_deductions"] - event["amount"])
         elif event["event_type"] == "payment_allocation":
             if event["stage"] == "advance":
                 state["advance_paid_amount"] += event["amount"]
@@ -909,7 +1104,9 @@ def update_order(
     
     # Track if dates changed
     old_date_to_work = db_order.date_to_work
+    old_date_manager_handover = db_order.date_manager_handover
     old_date_installation = db_order.date_installation
+    old_constructor_id = db_order.constructor_id
     
     order_data = order_update.dict(exclude_unset=True)
 
@@ -937,10 +1134,19 @@ def update_order(
             "date_advance_paid",
             "date_final_paid",
             "date_manager_paid",
+            "date_manager_handover",
             "constructive_days",
             "complectation_days",
             "preassembly_days",
             "installation_days",
+            "constructive_start_date",
+            "constructive_end_date",
+            "complectation_start_date",
+            "complectation_end_date",
+            "preassembly_start_date",
+            "preassembly_end_date",
+            "installation_start_date",
+            "installation_end_date",
         }
         for field in restricted_fields:
             if field in order_data:
@@ -967,9 +1173,9 @@ def update_order(
         
         # We need to use raw SQL to update PK and cascade to deductions
         from sqlalchemy import text
-        session.exec(text("UPDATE deduction SET order_id = :new_id WHERE order_id = :order_id"), {"new_id": new_id, "order_id": order_id}) # deductions first
-        session.exec(text("UPDATE order_file SET order_id = :new_id WHERE order_id = :order_id"), {"new_id": new_id, "order_id": order_id}) # files too
-        session.exec(text('UPDATE "order" SET id = :new_id WHERE id = :order_id'), {"new_id": new_id, "order_id": order_id}) # Quote table name 'order'
+        session.execute(text("UPDATE deduction SET order_id = :new_id WHERE order_id = :order_id"), {"new_id": new_id, "order_id": order_id}) # deductions first
+        session.execute(text("UPDATE order_file SET order_id = :new_id WHERE order_id = :order_id"), {"new_id": new_id, "order_id": order_id}) # files too
+        session.execute(text('UPDATE "order" SET id = :new_id WHERE id = :order_id'), {"new_id": new_id, "order_id": order_id}) # Quote table name 'order'
         session.commit()
         
         # Re-fetch new order
@@ -997,6 +1203,8 @@ def update_order(
                 # Let's overwrite to be safe and ensure 100/0 applies.
                 db_order.custom_stage1_percent = new_constructor.payment_stage1_percent
                 db_order.custom_stage2_percent = new_constructor.payment_stage2_percent
+                if not db_order.date_manager_handover and old_constructor_id != new_constructor_id:
+                    db_order.date_manager_handover = date.today()
     
     session.add(db_order)
     session.commit()
@@ -1004,6 +1212,7 @@ def update_order(
     
     # If work dates changed, trigger redistribution
     dates_changed = (
+        db_order.date_manager_handover != old_date_manager_handover or
         db_order.date_to_work != old_date_to_work or 
         db_order.date_installation != old_date_installation
     )
@@ -1030,12 +1239,12 @@ def delete_order(
     # Manually delete orphans just in case
     from sqlalchemy import text
     try:
-        session.exec(text("DELETE FROM deduction WHERE order_id = :order_id"), {"order_id": order_id}) # Fines
-        session.exec(text("DELETE FROM paymentallocation WHERE order_id = :order_id"), {"order_id": order_id}) # Allocations
-        session.exec(text("DELETE FROM orderfile WHERE order_id = :order_id"), {"order_id": order_id}) # Files
+        session.execute(text("DELETE FROM deduction WHERE order_id = :order_id"), {"order_id": order_id}) # Fines
+        session.execute(text("DELETE FROM paymentallocation WHERE order_id = :order_id"), {"order_id": order_id}) # Allocations
+        session.execute(text("DELETE FROM orderfile WHERE order_id = :order_id"), {"order_id": order_id}) # Files
         
         # Unlink manual payments (don't delete the money, just unlink order)
-        session.exec(text("UPDATE payment SET manual_order_id = NULL WHERE manual_order_id = :order_id"), {"order_id": order_id})
+        session.execute(text("UPDATE payment SET manual_order_id = NULL WHERE manual_order_id = :order_id"), {"order_id": order_id})
         session.commit()
     except Exception as e:
         print(f"Error cleaning up order dependencies: {e}")
@@ -1178,8 +1387,12 @@ def get_payments(
     
     result = []
     for p in payments:
-        if current_user.role == "constructor" and not is_payment_visible_to_constructor(session, p, current_user.id):
-            continue
+        if current_user.role == "constructor":
+            if not is_payment_visible_to_constructor(session, p, current_user.id):
+                continue
+        elif current_user.role == "manager":
+            if not is_payment_visible_to_manager(session, p, current_user.id):
+                continue
 
         p_read = PaymentRead.from_orm(p)
         
@@ -1209,12 +1422,17 @@ def get_payment_allocations(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    if current_user.role == "constructor" and not is_payment_visible_to_constructor(session, payment, current_user.id):
-        raise HTTPException(status_code=403, detail="Access denied for this payment")
+    if current_user.role == "constructor":
+        if not is_payment_visible_to_constructor(session, payment, current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied for this payment")
+    elif current_user.role == "manager":
+        if not is_payment_visible_to_manager(session, payment, current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied for this payment")
 
     allocations = session.exec(
         select(PaymentAllocation).where(PaymentAllocation.payment_id == payment_id)
     ).all()
+    allocations = filter_allocations_for_user(session, allocations, current_user)
     
     result = []
     for alloc in allocations:
@@ -1262,7 +1480,7 @@ def reconcile_order_allocations_after_financial_change(order: Order, session: Se
     Then run a redistribution pass so released money can close other debts or,
     after deleting a deduction, return to this order if unallocated funds exist.
     """
-    _, new_advance_needed, new_final_needed, _ = PaymentDistributionService._calculate_financials(order, session)
+    _, new_advance_needed, new_final_needed, manager_financials = PaymentDistributionService._calculate_financials(order, session)
 
     advance_overpaid = max(0, order.advance_paid_amount - new_advance_needed)
     final_overpaid = max(0, order.final_paid_amount - new_final_needed)
@@ -1298,6 +1516,36 @@ def reconcile_order_allocations_after_financial_change(order: Order, session: Se
                 alloc.amount -= total_to_free
                 session.add(alloc)
                 total_to_free = 0
+
+        session.commit()
+
+    # Manager overpay correction (when manager-target fine reduces available bonus).
+    manager_total_bonus = manager_financials.get("total_bonus", 0.0) if manager_financials else 0.0
+    manager_overpaid = max(0.0, (order.manager_paid_amount or 0.0) - manager_total_bonus)
+    if manager_overpaid > 0.01:
+        order.manager_paid_amount = manager_total_bonus
+        if manager_total_bonus < 0.01:
+            order.date_manager_paid = None
+        session.add(order)
+
+        to_free_manager = manager_overpaid
+        manager_allocations = session.exec(
+            select(PaymentAllocation)
+            .where(PaymentAllocation.order_id == order.id)
+            .where(PaymentAllocation.stage == "manager")
+            .order_by(PaymentAllocation.id.desc())
+        ).all()
+
+        for alloc in manager_allocations:
+            if to_free_manager <= 0.01:
+                break
+            if alloc.amount <= to_free_manager:
+                to_free_manager -= alloc.amount
+                session.delete(alloc)
+            else:
+                alloc.amount -= to_free_manager
+                session.add(alloc)
+                to_free_manager = 0.0
 
         session.commit()
 
@@ -1384,12 +1632,19 @@ def create_deduction(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_manager_user)
 ):
+    ensure_deduction_schema(session)
     # Verify order exists
     order = session.get(Order, deduction_data.order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    deduction = Deduction(**deduction_data.dict())
+    target_role = (deduction_data.target_role or "constructor").strip().lower()
+    if target_role not in {"constructor", "manager"}:
+        raise HTTPException(status_code=400, detail="target_role must be 'constructor' or 'manager'")
+
+    deduction_payload = deduction_data.dict()
+    deduction_payload["target_role"] = target_role
+    deduction = Deduction(**deduction_payload)
     session.add(deduction)
     session.commit()
     session.refresh(deduction)
@@ -1401,16 +1656,28 @@ def create_deduction(
     except Exception as e:
         print(f"Warning: recalculation after fine failed: {e}")
     
-    # Notify Constructor about Fine
-    if order.constructor_id:
-        constructor = session.get(User, order.constructor_id)
-        if constructor:
-            try:
-                TelegramService().notify_deduction(deduction, order.name, constructor)
-            except Exception as e:
-                print(f"Failed to send deduction notification: {e}")
+    # Notify responsible person
+    responsible_user = None
+    role_label = "конструктор"
+    if deduction.target_role == "manager":
+        role_label = "менеджер"
+        if order.manager_id:
+            responsible_user = session.get(User, order.manager_id)
+    else:
+        if order.constructor_id:
+            responsible_user = session.get(User, order.constructor_id)
 
-    log_activity(session, "ADD_DEDUCTION", f"Додано штраф {deduction.amount} грн для замовлення '{order.name}'")
+    if responsible_user:
+        try:
+            TelegramService().notify_deduction(deduction, order.name, responsible_user, role_label)
+        except Exception as e:
+            print(f"Failed to send deduction notification: {e}")
+
+    log_activity(
+        session,
+        "ADD_DEDUCTION",
+        f"Додано штраф {deduction.amount} грн ({role_label}) для замовлення '{order.name}'",
+    )
     return DeductionRead.from_deduction(deduction, order.name)
 
 @router.get("/deductions/")
@@ -1419,14 +1686,18 @@ def get_deductions(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    ensure_deduction_schema(session)
     if order_id:
         order = session.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         ensure_order_access(current_user, order)
-        deductions = session.exec(
-            select(Deduction).where(Deduction.order_id == order_id)
-        ).all()
+        query = select(Deduction).where(Deduction.order_id == order_id)
+        if current_user.role == "constructor":
+            query = query.where(
+                (Deduction.target_role == "constructor") | (Deduction.target_role.is_(None))
+            )
+        deductions = session.exec(query).all()
     else:
         if current_user.role in MANAGER_ROLES:
             deductions = session.exec(select(Deduction)).all()
@@ -1436,7 +1707,9 @@ def get_deductions(
             ).all()
             if own_order_ids:
                 deductions = session.exec(
-                    select(Deduction).where(Deduction.order_id.in_(own_order_ids))
+                    select(Deduction)
+                    .where(Deduction.order_id.in_(own_order_ids))
+                    .where((Deduction.target_role == "constructor") | (Deduction.target_role.is_(None)))
                 ).all()
             else:
                 deductions = []
@@ -1456,6 +1729,7 @@ def update_deduction(
     current_user: User = Depends(get_manager_user)
 ):
     from models import DeductionUpdate
+    ensure_deduction_schema(session)
     
     deduction = session.get(Deduction, deduction_id)
     if not deduction:
@@ -1484,6 +1758,7 @@ def delete_deduction(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_manager_user)
 ):
+    ensure_deduction_schema(session)
     deduction = session.get(Deduction, deduction_id)
     if not deduction:
         raise HTTPException(status_code=404, detail="Deduction not found")
@@ -1506,17 +1781,11 @@ def delete_deduction(
 def get_financial_stats(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
     from sqlalchemy import func
     from payments import Payment, PaymentAllocation
+    ensure_deduction_schema(session)
     
     try:
-        # Global Stats for everyone (Admin, Manager, Constructor)
-        # As per user request: "constructors ... should see figures of general debt and undistributed funds"
         total_received = session.exec(select(func.sum(Payment.amount))).one()
         total_allocated = session.exec(select(func.sum(PaymentAllocation.amount))).one()
-        # Count all unpaid deductions as "Total Debt" (or use calculated net debt?)
-        # Logic in frontend uses complex calc for "Total Debt". Backend just sends raw numbers usually?
-        # Wait, get_financial_stats sends "total_deductions". Frontend calculates "Total Debt" from ORDERS.
-        # So backend just needs to return valid global numbers for 'unallocated'.
-        
         total_deductions = session.exec(select(func.sum(Deduction.amount)).where(Deduction.is_paid == False)).one()
         
         if total_received is None: total_received = 0.0
@@ -1524,6 +1793,49 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
         if total_deductions is None: total_deductions = 0.0
         
         unallocated = total_received - total_allocated
+
+        if current_user.role == "manager":
+            manager_payments = session.exec(
+                select(Payment).where(Payment.manager_id == current_user.id)
+            ).all()
+            manager_payment_ids = [payment.id for payment in manager_payments]
+            manager_received = sum(payment.amount for payment in manager_payments)
+            if manager_payment_ids:
+                manager_allocated = session.exec(
+                    select(func.sum(PaymentAllocation.amount))
+                    .where(PaymentAllocation.payment_id.in_(manager_payment_ids))
+                ).one() or 0.0
+            else:
+                manager_allocated = 0.0
+
+            manager_orders = session.exec(
+                select(Order).where(Order.manager_id == current_user.id)
+            ).all()
+            manager_bonus_total = 0.0
+            manager_paid_total = 0.0
+            manager_debt = 0.0
+
+            for order in manager_orders:
+                manager_financials = calculate_manager_financials(order, session=session, manager=current_user)
+                manager_bonus_total += manager_financials["active_amount"]
+                manager_paid_total += manager_financials["active_paid_amount"]
+                manager_debt += manager_financials["current_debt"]
+
+            return {
+                "dashboard_scope": "manager",
+                "manager_personal_debt": manager_debt,
+                "manager_personal_unallocated": manager_received - manager_allocated,
+                "manager_personal_bonus": manager_bonus_total,
+                "manager_personal_paid": manager_paid_total,
+                "total_received": total_received,
+                "total_allocated": total_allocated,
+                "unallocated": unallocated,
+                "total_deductions": total_deductions,
+                "total_debt": 0.0,
+                "total_manager_debt": manager_debt,
+                "constructors_stats": [],
+                "manager_stats": []
+            }
         
         
         # Calculate Global Total Debt (Sum of all constructor net debts)
@@ -1591,23 +1903,14 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             m_orders = session.exec(select(Order).where(Order.manager_id == m.id)).all()
             m_bonus_total = 0.0
             m_paid_total = 0.0
+            m_debt = 0.0
             
             for o in m_orders:
-                # Logic from OrderRead
-                if m and hasattr(m, 'salary_mode') and hasattr(m, 'salary_percent'):
-                    if m.salary_mode == 'fixed_amount':
-                        ob = m.salary_percent
-                    elif m.salary_mode == 'materials_percent':
-                        ob = (o.price - (o.material_cost or 0)) * (m.salary_percent / 100)
-                    else:
-                        ob = o.price * (m.salary_percent / 100)
-                else:
-                    ob = (o.price - (o.material_cost or 0)) * 0.03
-                
-                m_bonus_total += ob
-                m_paid_total += (o.manager_paid_amount or 0)
-            
-            m_debt = max(0, m_bonus_total - m_paid_total)
+                manager_financials = calculate_manager_financials(o, session=session, manager=m)
+                m_bonus_total += manager_financials["active_amount"]
+                m_paid_total += manager_financials["active_paid_amount"]
+                m_debt += manager_financials["current_debt"]
+
             manager_stats.append({
                 "id": m.id,
                 "name": m.full_name or m.username,
@@ -1647,11 +1950,14 @@ def reset_database(
     current_user: User = Depends(get_super_admin_user)
 ):
     expected_password = os.environ.get("ADMIN_RESET_PASSWORD")
-    if not expected_password:
-        raise HTTPException(status_code=503, detail="Database reset is disabled")
-
-    if request.password != expected_password:
-        raise HTTPException(status_code=403, detail="Incorrect password")
+    if expected_password:
+        if request.password != expected_password:
+            raise HTTPException(status_code=403, detail="Incorrect password")
+    else:
+        # Fallback for environments where ADMIN_RESET_PASSWORD is not configured:
+        # allow reset when super-admin confirms with their account password.
+        if not verify_password(request.password, current_user.password_hash):
+            raise HTTPException(status_code=403, detail="Incorrect password")
     
     # Delete all data from tables in correct order (child first)
     from sqlmodel import delete
@@ -1674,6 +1980,7 @@ def reset_database(
 def backup_database(current_user: User = Depends(get_admin_user), session: Session = Depends(get_session)):
     from datetime import datetime
     from fastapi.responses import JSONResponse
+    ensure_deduction_schema(session)
     
     # 1. Fetch all data
     users = session.exec(select(User)).all()
@@ -1715,6 +2022,7 @@ def backup_database(current_user: User = Depends(get_admin_user), session: Sessi
 def restore_database(file: UploadFile = File(...), current_user: User = Depends(get_super_admin_user), session: Session = Depends(get_session)):
     import json
     from sqlmodel import delete
+    ensure_deduction_schema(session)
     
     # 1. Read and parse JSON
     try:
@@ -1768,9 +2076,18 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
         for item in data.get("orders", []):
             # Manually parse date fields
             if "date_received" in item: item["date_received"] = parse_date(item["date_received"])
+            if "date_manager_handover" in item: item["date_manager_handover"] = parse_date(item["date_manager_handover"])
             if "date_design_deadline" in item: item["date_design_deadline"] = parse_date(item["date_design_deadline"])
             if "date_to_work" in item: item["date_to_work"] = parse_date(item["date_to_work"])
             if "date_installation" in item: item["date_installation"] = parse_date(item["date_installation"])
+            if "constructive_start_date" in item: item["constructive_start_date"] = parse_date(item["constructive_start_date"])
+            if "constructive_end_date" in item: item["constructive_end_date"] = parse_date(item["constructive_end_date"])
+            if "complectation_start_date" in item: item["complectation_start_date"] = parse_date(item["complectation_start_date"])
+            if "complectation_end_date" in item: item["complectation_end_date"] = parse_date(item["complectation_end_date"])
+            if "preassembly_start_date" in item: item["preassembly_start_date"] = parse_date(item["preassembly_start_date"])
+            if "preassembly_end_date" in item: item["preassembly_end_date"] = parse_date(item["preassembly_end_date"])
+            if "installation_start_date" in item: item["installation_start_date"] = parse_date(item["installation_start_date"])
+            if "installation_end_date" in item: item["installation_end_date"] = parse_date(item["installation_end_date"])
             if "date_advance_paid" in item: item["date_advance_paid"] = parse_date(item["date_advance_paid"])
             if "date_final_paid" in item: item["date_final_paid"] = parse_date(item["date_final_paid"])
             
@@ -1780,6 +2097,14 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
         # PAYMENTS
         for item in data.get("payments", []):
             if "date_received" in item: item["date_received"] = parse_date(item["date_received"])
+            if "constructive_start_date" in item: item["constructive_start_date"] = parse_date(item["constructive_start_date"])
+            if "constructive_end_date" in item: item["constructive_end_date"] = parse_date(item["constructive_end_date"])
+            if "complectation_start_date" in item: item["complectation_start_date"] = parse_date(item["complectation_start_date"])
+            if "complectation_end_date" in item: item["complectation_end_date"] = parse_date(item["complectation_end_date"])
+            if "preassembly_start_date" in item: item["preassembly_start_date"] = parse_date(item["preassembly_start_date"])
+            if "preassembly_end_date" in item: item["preassembly_end_date"] = parse_date(item["preassembly_end_date"])
+            if "installation_start_date" in item: item["installation_start_date"] = parse_date(item["installation_start_date"])
+            if "installation_end_date" in item: item["installation_end_date"] = parse_date(item["installation_end_date"])
             if "created_at" in item: item["created_at"] = parse_datetime(item["created_at"])
             session.add(Payment(**item))
         session.flush()
@@ -1819,11 +2144,11 @@ def restore_database(file: UploadFile = File(...), current_user: User = Depends(
 
 # --- ADMIN SETTINGS ---
 @router.get("/admin/settings", response_model=Settings)
-def get_settings(current_user: User = Depends(get_admin_user)):
+def get_settings(current_user: User = Depends(get_super_admin_user)):
     return load_settings()
 
 @router.post("/admin/settings", response_model=Settings)
-def update_settings(settings: Settings, current_user: User = Depends(get_admin_user)):
+def update_settings(settings: Settings, current_user: User = Depends(get_super_admin_user)):
     save_settings(settings)
     return settings
 

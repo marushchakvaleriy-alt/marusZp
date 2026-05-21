@@ -270,6 +270,28 @@ def migrate():
                     logger.error(f"Failed to add 'custom_stage2_percent': {e}")
                     session.rollback()
             
+            # Check for date_manager_handover (manager stage-1 activation)
+            try:
+                session.exec(text("SELECT date_manager_handover FROM \"order\" LIMIT 1"))
+                logger.info("Column 'date_manager_handover' already exists.")
+            except Exception:
+                session.rollback()
+                logger.info("Column 'date_manager_handover' not found. Adding it...")
+                try:
+                    session.connection().execute(text("ALTER TABLE \"order\" ADD COLUMN date_manager_handover DATE"))
+                    session.commit()
+                    logger.info("Added 'date_manager_handover' column.")
+                except Exception as e:
+                    logger.error(f"Failed to add 'date_manager_handover': {e}")
+                    session.rollback()
+                    try:
+                        session.connection().execute(text("ALTER TABLE order ADD COLUMN date_manager_handover DATE"))
+                        session.commit()
+                        logger.info("Added 'date_manager_handover' column (unquoted).")
+                    except Exception as e2:
+                        logger.error(f"Failed to add 'date_manager_handover' (unquoted): {e2}")
+                        session.rollback()
+
             # Check for date_installation_plan (v1.6)
             try:
                 session.exec(text("SELECT date_installation_plan FROM \"order\" LIMIT 1"))
@@ -379,6 +401,39 @@ def migrate():
                     except Exception as e2:
                         logger.error(f"Failed to add 'installation_days' (unquoted): {e2}")
                         session.rollback()
+
+            planning_stage_date_columns = [
+                ("constructive_start_date", "ALTER TABLE \"order\" ADD COLUMN constructive_start_date DATE", "ALTER TABLE order ADD COLUMN constructive_start_date DATE"),
+                ("constructive_end_date", "ALTER TABLE \"order\" ADD COLUMN constructive_end_date DATE", "ALTER TABLE order ADD COLUMN constructive_end_date DATE"),
+                ("complectation_start_date", "ALTER TABLE \"order\" ADD COLUMN complectation_start_date DATE", "ALTER TABLE order ADD COLUMN complectation_start_date DATE"),
+                ("complectation_end_date", "ALTER TABLE \"order\" ADD COLUMN complectation_end_date DATE", "ALTER TABLE order ADD COLUMN complectation_end_date DATE"),
+                ("preassembly_start_date", "ALTER TABLE \"order\" ADD COLUMN preassembly_start_date DATE", "ALTER TABLE order ADD COLUMN preassembly_start_date DATE"),
+                ("preassembly_end_date", "ALTER TABLE \"order\" ADD COLUMN preassembly_end_date DATE", "ALTER TABLE order ADD COLUMN preassembly_end_date DATE"),
+                ("installation_start_date", "ALTER TABLE \"order\" ADD COLUMN installation_start_date DATE", "ALTER TABLE order ADD COLUMN installation_start_date DATE"),
+                ("installation_end_date", "ALTER TABLE \"order\" ADD COLUMN installation_end_date DATE", "ALTER TABLE order ADD COLUMN installation_end_date DATE"),
+            ]
+
+            for column_name, quoted_sql, unquoted_sql in planning_stage_date_columns:
+                try:
+                    session.exec(text(f"SELECT {column_name} FROM \"order\" LIMIT 1"))
+                    logger.info(f"Column '{column_name}' already exists.")
+                except Exception:
+                    session.rollback()
+                    logger.info(f"Column '{column_name}' not found. Adding it...")
+                    try:
+                        session.connection().execute(text(quoted_sql))
+                        session.commit()
+                        logger.info(f"Added '{column_name}' column.")
+                    except Exception as e:
+                        logger.error(f"Failed to add '{column_name}': {e}")
+                        session.rollback()
+                        try:
+                            session.connection().execute(text(unquoted_sql))
+                            session.commit()
+                            logger.info(f"Added '{column_name}' column (unquoted).")
+                        except Exception as e2:
+                            logger.error(f"Failed to add '{column_name}' (unquoted): {e2}")
+                            session.rollback()
             
             # Check for manager_id
             try:

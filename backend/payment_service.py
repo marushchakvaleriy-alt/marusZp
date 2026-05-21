@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 from sqlmodel import Session, select
 from models import Order, User
 from payments import Payment, PaymentAllocation
-from financial_logic import calculate_constructor_financials
+from financial_logic import calculate_constructor_financials, calculate_manager_financials
 
 class PaymentDistributionService:
     """Сервіс для автоматичного розподілу платежів"""
@@ -50,27 +50,17 @@ class PaymentDistributionService:
         return allocations, remaining
     
     @staticmethod
-    def _calculate_financials(order: Order, session: Session) -> Tuple[float, float, float, float]:
+    def _calculate_financials(order: Order, session: Session) -> Tuple[float, float, float, dict]:
         """
-        Calculates (bonus, advance_amount, final_amount) using the same logic as OrderRead.
+        Calculates constructor and manager financials using the same logic as OrderRead.
         """
         constructor_financials = calculate_constructor_financials(order, session=session)
         bonus = constructor_financials["bonus"]
         advance_amount = constructor_financials["advance_amount"]
         final_amount = constructor_financials["final_amount"]
-        
-        # 3. Manager Bonus
-        manager = session.get(User, order.manager_id) if order.manager_id else None
-        manager_bonus = 0.0
-        if manager and hasattr(manager, 'salary_mode') and hasattr(manager, 'salary_percent'):
-            if manager.salary_mode == 'fixed_amount':
-                manager_bonus = manager.salary_percent
-            elif manager.salary_mode == 'materials_percent':
-                manager_bonus = (order.material_cost or 0) * (manager.salary_percent / 100)
-            else:
-                manager_bonus = order.price * (manager.salary_percent / 100)
-        
-        return bonus, advance_amount, final_amount, manager_bonus
+        manager_financials = calculate_manager_financials(order, session=session)
+
+        return bonus, advance_amount, final_amount, manager_financials
 
     @staticmethod
     def _allocate_to_order(
@@ -232,18 +222,18 @@ class PaymentDistributionService:
         remaining_to_give = amount
         
         # Calculate financials dynamically
-        _, advance_amount, final_amount, manager_bonus = PaymentDistributionService._calculate_financials(order, session)
+        _, advance_amount, final_amount, manager_financials = PaymentDistributionService._calculate_financials(order, session)
         
         if is_manager_payment:
             # Менеджерська виплата
-            manager_needed = max(0, manager_bonus - (order.manager_paid_amount or 0))
+            manager_needed = manager_financials["current_debt"]
             if manager_needed > 0.01 and remaining_to_give > 0:
                 chunk = min(remaining_to_give, manager_needed)
                 order.manager_paid_amount += chunk
                 taken += chunk
                 remaining_to_give -= chunk
                 
-                if order.manager_paid_amount >= manager_bonus - 0.01 and not order.date_manager_paid:
+                if order.manager_paid_amount >= manager_financials["total_bonus"] - 0.01 and not order.date_manager_paid:
                     order.date_manager_paid = date.today()
                 
                 allocations.append({

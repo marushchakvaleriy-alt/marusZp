@@ -70,16 +70,17 @@ class TelegramService:
         )
         self.send_message(constructor.telegram_id, message)
 
-    def notify_deduction(self, deduction, order_name, constructor):
+    def notify_deduction(self, deduction, order_name, recipient_user, role_label="конструктор"):
         """Notifier for when a deduction (fine) is created."""
-        if not constructor.telegram_id:
+        if not recipient_user or not recipient_user.telegram_id:
             return
 
         message = (
             f"⚠️ <b>НОВЕ ВІДРАХУВАННЯ (ШТРАФ)</b>\n\n"
             f"🆔 <b>Замовлення:</b> {order_name}\n"
+            f"👤 <b>Кому:</b> {role_label}\n"
             f"💰 <b>Сума:</b> {deduction.amount:.2f} грн\n"
             f"📝 <b>Причина:</b> {deduction.description}\n\n"
             f"<i>Будь ласка, будьте уважніші.</i>"
         )
-        self.send_message(constructor.telegram_id, message)
+        self.send_message(recipient_user.telegram_id, message)

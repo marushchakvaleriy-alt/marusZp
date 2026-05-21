@@ -1,9 +1,18 @@
 import axios from 'axios';
 
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+const isFlyFrontend =
+    typeof window !== 'undefined' &&
+    /maruszp-frontend\.fly\.dev$/i.test(window.location.hostname);
+
+const defaultApiBaseUrl = isFlyFrontend
+    ? 'https://maruszp-backend.fly.dev'
+    : 'http://localhost:8000';
+
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || defaultApiBaseUrl).replace(/\/+$/, '');
 
 export const api = axios.create({
     baseURL: API_BASE_URL,
+    timeout: 15000,
 });
 
 export const resetDatabase = async (password) => {

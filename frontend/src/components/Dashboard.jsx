@@ -45,11 +45,16 @@ const StatCard = ({ title, value, type = 'default', showCurrency = true }) => {
 const Dashboard = ({ refreshTrigger }) => {
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+    const isManager = user?.role === 'manager';
+    const isConstructor = user?.role === 'constructor';
 
     const [stats, setStats] = useState({
+        dashboardScope: "global",
         totalDebt: "0",
         totalManagerDebt: "0",
         unallocatedFunds: "0",
+        managerPersonalDebt: "0",
+        managerPersonalUnallocated: "0",
         constructorStats: [],
         managerStats: []
     });
@@ -60,9 +65,12 @@ const Dashboard = ({ refreshTrigger }) => {
                 const financialStats = await getFinancialStats();
 
                 setStats({
+                    dashboardScope: financialStats.dashboard_scope || "global",
                     totalDebt: (financialStats.total_debt || 0).toLocaleString(),
                     totalManagerDebt: (financialStats.total_manager_debt || 0).toLocaleString(),
                     unallocatedFunds: (financialStats.unallocated || 0).toLocaleString(),
+                    managerPersonalDebt: (financialStats.manager_personal_debt || 0).toLocaleString(),
+                    managerPersonalUnallocated: (financialStats.manager_personal_unallocated || 0).toLocaleString(),
                     constructorStats: financialStats.constructors_stats || [],
                     managerStats: financialStats.manager_stats || []
                 });
@@ -77,14 +85,22 @@ const Dashboard = ({ refreshTrigger }) => {
 
     return (
         <div className="space-y-6 mb-10">
-            {/* Global Stats */}
-            {(isAdmin || user?.role === 'constructor' || (user?.role === 'manager' && user?.can_see_dashboard === true)) && (
+            {isManager ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <StatCard title="Борг перед менеджером" value={stats.managerPersonalDebt} type="yellow" />
+                    <StatCard title="Нерозподілені кошти менеджера" value={stats.managerPersonalUnallocated} type="blue" />
+                </div>
+            ) : (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <StatCard title="Борг конструкторам" value={stats.totalDebt} type="red" />
-                    {parseFloat(stats.totalManagerDebt.replace(/[^0-9.-]+/g,"")) > 0 && (
-                        <StatCard title="Борг менеджерам" value={stats.totalManagerDebt} type="yellow" />
+                    {(isAdmin || isConstructor) && (
+                        <>
+                            <StatCard title="Борг конструкторам" value={stats.totalDebt} type="red" />
+                            {isAdmin && (
+                                <StatCard title="Борг менеджерам" value={stats.totalManagerDebt} type="yellow" />
+                            )}
+                            <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="blue" />
+                        </>
                     )}
-                    <StatCard title="Нерозподілено" value={stats.unallocatedFunds} type="blue" />
                 </div>
             )}
 

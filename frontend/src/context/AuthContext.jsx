@@ -5,7 +5,14 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [token, setToken] = useState(localStorage.getItem('token'));
+    const [token, setToken] = useState(() => {
+        try {
+            return localStorage.getItem('token');
+        } catch (error) {
+            console.warn('Cannot access localStorage token:', error);
+            return null;
+        }
+    });
     const [loading, setLoading] = useState(true);
 
     const applyToken = (jwtToken) => {
@@ -47,7 +54,11 @@ export const AuthProvider = ({ children }) => {
             const response = await api.post('/token', formData);
             const { access_token } = response.data;
 
-            localStorage.setItem('token', access_token);
+            try {
+                localStorage.setItem('token', access_token);
+            } catch (storageError) {
+                console.warn('Cannot persist token in localStorage:', storageError);
+            }
             setToken(access_token);
             await fetchCurrentUser(access_token);
             return true;
@@ -58,7 +69,11 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
-        localStorage.removeItem('token');
+        try {
+            localStorage.removeItem('token');
+        } catch (error) {
+            console.warn('Cannot remove token from localStorage:', error);
+        }
         setToken(null);
         setUser(null);
         applyToken(null);
@@ -66,7 +81,7 @@ export const AuthProvider = ({ children }) => {
 
     return (
         <AuthContext.Provider value={{ user, token, login, logout, loading }}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 };

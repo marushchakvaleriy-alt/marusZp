@@ -10,6 +10,7 @@ const PaymentHistory = () => {
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [allocations, setAllocations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [allocationsLoading, setAllocationsLoading] = useState(false);
     const [showOnlyUnallocated, setShowOnlyUnallocated] = useState(false);
 
     useEffect(() => {
@@ -29,11 +30,16 @@ const PaymentHistory = () => {
 
     const handlePaymentClick = async (payment) => {
         setSelectedPayment(payment);
+        setAllocations([]);
+        setAllocationsLoading(true);
         try {
             const data = await getPaymentAllocations(payment.id);
             setAllocations(data);
         } catch (error) {
             console.error('Failed to load allocations:', error);
+            setAllocations([]);
+        } finally {
+            setAllocationsLoading(false);
         }
     };
 
@@ -77,7 +83,9 @@ const PaymentHistory = () => {
         <div className="space-y-6">
             <div>
                 <h2 className="text-2xl font-black text-slate-800 uppercase italic mb-4">Історія платежів</h2>
-                <p className="text-sm text-slate-500 mb-6">Перегляд всіх внесених коштів та їх розподілу</p>
+                <p className="text-sm text-slate-500 mb-6">
+                    {isAdmin ? 'Перегляд всіх внесених коштів та їх розподілу' : 'Перегляд лише тих платежів і розподілів, які відносяться до вас'}
+                </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -186,9 +194,13 @@ const PaymentHistory = () => {
                             <div className="text-center text-slate-400 py-10">
                                 Оберіть платіж зліва для перегляду деталей розподілу
                             </div>
-                        ) : allocations.length === 0 ? (
+                        ) : allocationsLoading ? (
                             <div className="text-center text-slate-400 py-10">
                                 Завантаження...
+                            </div>
+                        ) : allocations.length === 0 ? (
+                            <div className="text-center text-slate-400 py-10">
+                                {isAdmin ? 'Цей платіж ще не розподілений' : 'Для цього платежу немає доступних вам розподілів'}
                             </div>
                         ) : (
                             <div className="space-y-4">

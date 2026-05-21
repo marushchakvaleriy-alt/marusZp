@@ -5,7 +5,13 @@ const SeasonBackground = ({ season = 'winter' }) => {
 
     useEffect(() => {
         const canvas = canvasRef.current;
+        if (!canvas) return undefined;
+
         const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            // If 2D canvas is unavailable in current browser environment, skip animation gracefully.
+            return undefined;
+        }
         let animationFrameId;
 
         // Configuration based on season

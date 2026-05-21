@@ -1,6 +1,27 @@
 import React, { useMemo } from 'react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const LEFT_COLUMN_WIDTH = 350;
+const MIN_DAY_WIDTH = 86;
+
+const STAGE_META = {
+    constructive: {
+        label: 'Конструктив',
+        color: '#58a6ff',
+    },
+    complectation: {
+        label: 'Комплектація',
+        color: '#f7b53a',
+    },
+    preassembly: {
+        label: 'Предзбірка',
+        color: '#9b7cf7',
+    },
+    installation: {
+        label: 'Монтаж',
+        color: '#37c49a',
+    },
+};
 
 const parseDate = (value) => {
     if (!value) return null;
@@ -11,8 +32,6 @@ const parseDate = (value) => {
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const addDays = (date, days) => new Date(date.getTime() + days * DAY_MS);
 const diffDays = (a, b) => Math.round((b.getTime() - a.getTime()) / DAY_MS);
-const fmt = (date) => date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
-const fmtShort = (date) => date.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short' });
 
 const clampDays = (value, fallback) => {
     const parsed = Number(value);
@@ -20,10 +39,15 @@ const clampDays = (value, fallback) => {
     return Math.max(1, Math.min(60, Math.round(parsed)));
 };
 
-const normalizeRange = (start, end) => {
-    if (!start || !end) return [null, null];
-    if (start <= end) return [start, end];
-    return [end, start];
+const formatDate = (date) => (
+    date
+        ? date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' })
+        : '--.--'
+);
+
+const formatHeaderDate = (date) => {
+    const label = date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
 };
 
 const buildForwardStages = (start, days) => {
@@ -69,7 +93,57 @@ const buildBackwardStages = (installationStart, days) => {
     };
 };
 
-const GanttView = ({ orders, onSelectOrder, canManage, onPlanUpdate }) => {
+const getRangeStyle = (timelineStart, totalDays, start, end) => {
+    if (!start || !end) return null;
+    const left = (diffDays(timelineStart, start) / totalDays) * 100;
+    const width = ((diffDays(start, end) + 1) / totalDays) * 100;
+
+    return {
+        left: `${Math.max(0, Math.min(100, left))}%`,
+        width: `${Math.max(1.25, Math.min(100, width))}%`,
+    };
+};
+
+const getMarkerStyle = (timelineStart, totalDays, date, shift = 0.5) => {
+    if (!date) return null;
+    const left = ((diffDays(timelineStart, date) + shift) / totalDays) * 100;
+    return { left: `${Math.max(0, Math.min(100, left))}%` };
+};
+
+const resolveStageRange = (fallbackStart, fallbackEnd, manualStart, manualEnd, duration) => {
+    if (manualStart && manualEnd) {
+        const normalizedStart = manualStart <= manualEnd ? manualStart : manualEnd;
+        const normalizedEnd = manualStart <= manualEnd ? manualEnd : manualStart;
+        return {
+            start: normalizedStart,
+            end: normalizedEnd,
+            duration: Math.max(1, diffDays(normalizedStart, normalizedEnd) + 1),
+        };
+    }
+    if (manualStart) {
+        return {
+            start: manualStart,
+            end: addDays(manualStart, duration - 1),
+            duration,
+        };
+    }
+    if (manualEnd) {
+        return {
+            start: addDays(manualEnd, -(duration - 1)),
+            end: manualEnd,
+            duration,
+        };
+    }
+    return {
+        start: fallbackStart,
+        end: fallbackEnd,
+        duration,
+    };
+};
+
+const GanttView = ({ orders, onSelectOrder, canManage }) => {
+    const today = startOfDay(new Date());
+
     const prepared = useMemo(() => {
         return orders.map((order) => {
             const dateReceived = parseDate(order.date_received);
@@ -77,6 +151,16 @@ const GanttView = ({ orders, onSelectOrder, canManage, onPlanUpdate }) => {
             const dateDesignDeadline = parseDate(order.date_design_deadline);
             const dateInstallPlan = parseDate(order.date_installation_plan);
             const dateInstallDone = parseDate(order.date_installation);
+            const manualStageDates = {
+                constructiveStart: parseDate(order.constructive_start_date),
+                constructiveEnd: parseDate(order.constructive_end_date),
+                complectationStart: parseDate(order.complectation_start_date),
+                complectationEnd: parseDate(order.complectation_end_date),
+                preassemblyStart: parseDate(order.preassembly_start_date),
+                preassemblyEnd: parseDate(order.preassembly_end_date),
+                installationStart: parseDate(order.installation_start_date),
+                installationEnd: parseDate(order.installation_end_date),
+            };
 
             const days = {
                 constructive: clampDays(order.constructive_days, 5),
@@ -85,326 +169,317 @@ const GanttView = ({ orders, onSelectOrder, canManage, onPlanUpdate }) => {
                 installation: clampDays(order.installation_days, 3),
             };
 
-            const stages = dateInstallPlan
+            const rawStages = dateInstallPlan
                 ? buildBackwardStages(dateInstallPlan, days)
-                : buildForwardStages(dateToWork || dateReceived || startOfDay(new Date()), days);
+                : buildForwardStages(dateToWork || dateReceived || today, days);
+
+            const constructiveRange = resolveStageRange(
+                rawStages.constructiveStart,
+                rawStages.constructiveEnd,
+                manualStageDates.constructiveStart,
+                manualStageDates.constructiveEnd,
+                days.constructive
+            );
+            const complectationRange = resolveStageRange(
+                rawStages.complectationStart,
+                rawStages.complectationEnd,
+                manualStageDates.complectationStart,
+                manualStageDates.complectationEnd,
+                days.complectation
+            );
+            const preassemblyRange = resolveStageRange(
+                rawStages.preassemblyStart,
+                rawStages.preassemblyEnd,
+                manualStageDates.preassemblyStart,
+                manualStageDates.preassemblyEnd,
+                days.preassembly
+            );
+            const installationRange = resolveStageRange(
+                rawStages.installationStart,
+                rawStages.installationEnd,
+                manualStageDates.installationStart,
+                manualStageDates.installationEnd,
+                days.installation
+            );
+
+            const stages = [
+                {
+                    key: 'constructive',
+                    label: STAGE_META.constructive.label,
+                    color: STAGE_META.constructive.color,
+                    start: constructiveRange.start,
+                    end: constructiveRange.end,
+                    duration: constructiveRange.duration,
+                },
+                {
+                    key: 'complectation',
+                    label: STAGE_META.complectation.label,
+                    color: STAGE_META.complectation.color,
+                    start: complectationRange.start,
+                    end: complectationRange.end,
+                    duration: complectationRange.duration,
+                },
+                {
+                    key: 'preassembly',
+                    label: STAGE_META.preassembly.label,
+                    color: STAGE_META.preassembly.color,
+                    start: preassemblyRange.start,
+                    end: preassemblyRange.end,
+                    duration: preassemblyRange.duration,
+                },
+                {
+                    key: 'installation',
+                    label: STAGE_META.installation.label,
+                    color: STAGE_META.installation.color,
+                    start: installationRange.start,
+                    end: installationRange.end,
+                    duration: installationRange.duration,
+                },
+            ];
+
+            const productionStart = stages[0].start;
+            const productionEnd = stages[stages.length - 1].end;
 
             const points = [
-                dateReceived,
+                productionStart,
+                productionEnd,
                 dateToWork,
                 dateDesignDeadline,
                 dateInstallPlan,
                 dateInstallDone,
-                stages.constructiveStart,
-                stages.constructiveEnd,
-                stages.complectationStart,
-                stages.complectationEnd,
-                stages.preassemblyStart,
-                stages.preassemblyEnd,
-                stages.installationStart,
-                stages.installationEnd,
             ].filter(Boolean);
+
+            const overdueDesign = Boolean(
+                dateDesignDeadline &&
+                !dateToWork &&
+                dateDesignDeadline < today
+            );
+            const overdueInstall = Boolean(
+                dateInstallPlan &&
+                !dateInstallDone &&
+                dateInstallPlan < today
+            );
+            const noInstallPlan = !dateInstallPlan;
+
+            let tone = 'normal';
+            let status = 'В роботі';
+            if (overdueDesign || overdueInstall) {
+                tone = 'danger';
+                status = 'Ризик';
+            } else if (noInstallPlan) {
+                tone = 'warning';
+                status = 'Без плану';
+            }
 
             return {
                 order,
-                ...days,
-                dateReceived,
+                stages,
                 dateToWork,
                 dateDesignDeadline,
                 dateInstallPlan,
                 dateInstallDone,
-                ...stages,
-                minDate: points.length ? new Date(Math.min(...points.map((d) => d.getTime()))) : null,
-                maxDate: points.length ? new Date(Math.max(...points.map((d) => d.getTime()))) : null,
+                productionStart,
+                productionEnd,
+                minDate: points.length ? new Date(Math.min(...points.map((point) => point.getTime()))) : productionStart,
+                maxDate: points.length ? new Date(Math.max(...points.map((point) => point.getTime()))) : productionEnd,
+                status,
+                tone,
+                days,
             };
         });
-    }, [orders]);
+    }, [orders, today]);
 
     const timeline = useMemo(() => {
-        const minDates = prepared.map((p) => p.minDate).filter(Boolean);
-        const maxDates = prepared.map((p) => p.maxDate).filter(Boolean);
-        const today = startOfDay(new Date());
+        const minDates = prepared.map((item) => item.minDate).filter(Boolean);
+        const maxDates = prepared.map((item) => item.maxDate).filter(Boolean);
 
         if (!minDates.length || !maxDates.length) {
             return {
-                start: addDays(today, -14),
-                end: addDays(today, 30),
+                start: addDays(today, -1),
+                end: addDays(today, 6),
             };
         }
 
-        const minDate = new Date(Math.min(...minDates.map((d) => d.getTime())));
-        const maxDate = new Date(Math.max(...maxDates.map((d) => d.getTime())));
+        const minDate = new Date(Math.min(...minDates.map((date) => date.getTime())));
+        const maxDate = new Date(Math.max(...maxDates.map((date) => date.getTime())));
+
         return {
-            start: addDays(startOfDay(minDate), -5),
-            end: addDays(startOfDay(maxDate), 12),
+            start: addDays(startOfDay(minDate), -1),
+            end: addDays(startOfDay(maxDate), 2),
         };
-    }, [prepared]);
+    }, [prepared, today]);
 
     const totalDays = Math.max(1, diffDays(timeline.start, timeline.end) + 1);
-    const todayOffset = Math.min(100, Math.max(0, (diffDays(timeline.start, startOfDay(new Date())) / totalDays) * 100));
+    const timelineWidth = Math.max(900, totalDays * MIN_DAY_WIDTH);
 
-    const monthTicks = useMemo(() => {
-        const ticks = [];
-        let cursor = new Date(timeline.start.getFullYear(), timeline.start.getMonth(), 1);
-        if (cursor < timeline.start) {
-            cursor = new Date(timeline.start.getFullYear(), timeline.start.getMonth() + 1, 1);
-        }
-        while (cursor <= timeline.end) {
-            ticks.push(new Date(cursor));
-            cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-        }
-        return ticks;
-    }, [timeline.end, timeline.start]);
+    const dayHeaders = useMemo(
+        () => Array.from({ length: totalDays }, (_, index) => addDays(timeline.start, index)),
+        [timeline.start, totalDays]
+    );
 
-    const segmentStyle = (start, end) => {
-        const [normStart, normEnd] = normalizeRange(start, end);
-        if (!normStart || !normEnd) return null;
-
-        const left = (diffDays(timeline.start, normStart) / totalDays) * 100;
-        const width = ((diffDays(normStart, normEnd) + 1) / totalDays) * 100;
-
-        return {
-            left: `${Math.max(0, Math.min(100, left))}%`,
-            width: `${Math.max(0.35, Math.min(100, width))}%`,
-        };
-    };
-
-    const pointStyle = (date) => {
-        if (!date) return null;
-        const left = (diffDays(timeline.start, date) / totalDays) * 100;
-        return { left: `${Math.max(0, Math.min(100, left))}%` };
-    };
+    const dayWidthPercent = 100 / totalDays;
+    const todayStyle = getMarkerStyle(timeline.start, totalDays, today, 0);
 
     return (
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden border border-white/20">
-            <div className="p-4 border-b border-slate-200/40 bg-white/60">
-                <h2 className="text-lg font-black text-slate-800 uppercase italic">Планування Gantt</h2>
-                <p className="text-xs text-slate-500 mt-1">
-                    Повний цикл: конструктив, комплектація, предзбірка, монтаж.
-                </p>
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl">
+            <div className="border-b border-slate-200 bg-white/90 px-4 py-3">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h2 className="text-lg font-black uppercase italic text-slate-800">План виробництва</h2>
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                            Денний Gantt: кожне замовлення окремим рядком, а праворуч одна кольорова лінія по етапах.
+                        </p>
+                    </div>
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                        {canManage ? 'Клік по рядку відкриває замовлення для редагування.' : 'Клік по рядку відкриває деталі замовлення.'}
+                    </div>
+                </div>
             </div>
 
-            <div className="overflow-x-auto">
-                <div className="min-w-[1120px]">
-                    <div className="grid grid-cols-[360px_1fr] border-b border-slate-200/40 bg-slate-50/70">
-                        <div className="p-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Замовлення / Етапи</div>
-                        <div className="relative p-3 h-14">
-                            <div className="absolute inset-0 pointer-events-none">
-                                {monthTicks.map((tick) => (
-                                    <div
-                                        key={`tick-${tick.toISOString()}`}
-                                        className="absolute top-0 bottom-0 border-l border-dashed border-slate-300/70"
-                                        style={{ left: `${(diffDays(timeline.start, tick) / totalDays) * 100}%` }}
-                                    />
-                                ))}
-                            </div>
-                            <div className="relative h-full">
-                                {monthTicks.map((tick) => (
-                                    <span
-                                        key={`label-${tick.toISOString()}`}
-                                        className="absolute top-1 text-[10px] font-bold text-slate-500 uppercase"
-                                        style={{ left: `${(diffDays(timeline.start, tick) / totalDays) * 100}%` }}
-                                    >
-                                        {tick.toLocaleDateString('uk-UA', { month: 'short' })}
-                                    </span>
-                                ))}
-                                <span className="absolute bottom-0 right-2 text-[10px] font-bold text-slate-400">
-                                    {fmtShort(timeline.start)} - {fmtShort(timeline.end)}
-                                </span>
-                            </div>
+            <div className="max-h-[72vh] overflow-auto">
+                <div style={{ minWidth: LEFT_COLUMN_WIDTH + timelineWidth }}>
+                    <div className="grid" style={{ gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px ${timelineWidth}px` }}>
+                        <div className="sticky left-0 top-0 z-[70] flex h-10 items-center justify-between border-r border-b border-slate-200 bg-slate-50 px-3 text-[11px] font-bold uppercase tracking-wide text-slate-500 shadow-[4px_0_12px_-10px_rgba(15,23,42,0.28),1px_0_0_0_rgba(226,232,240,1)]">
+                            <span>Замовлення</span>
+                            <span className="text-slate-400">📊</span>
+                        </div>
+
+                        <div
+                            className="sticky top-0 z-40 grid h-10 border-b border-slate-200 bg-sky-50/95 text-[11px] font-bold text-slate-500 backdrop-blur"
+                            style={{ gridTemplateColumns: `repeat(${dayHeaders.length}, minmax(0, 1fr))` }}
+                        >
+                            {dayHeaders.map((day) => (
+                                <div
+                                    key={day.toISOString()}
+                                    className="flex items-center justify-center border-l border-sky-100"
+                                >
+                                    {formatHeaderDate(day)}
+                                </div>
+                            ))}
                         </div>
                     </div>
 
                     {prepared.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 italic">Немає замовлень для Gantt-плану</div>
+                        <div className="px-4 py-10 text-center text-sm italic text-slate-400">
+                            Немає замовлень для Gantt-плану
+                        </div>
                     ) : (
                         prepared.map((item) => {
-                            const constructiveSeg = segmentStyle(item.constructiveStart, item.constructiveEnd);
-                            const complectationSeg = segmentStyle(item.complectationStart, item.complectationEnd);
-                            const preassemblySeg = segmentStyle(item.preassemblyStart, item.preassemblyEnd);
-                            const installationSeg = segmentStyle(item.installationStart, item.installationEnd);
-                            const workPoint = pointStyle(item.dateToWork);
-                            const deadlinePoint = pointStyle(item.dateDesignDeadline);
-                            const installDonePoint = pointStyle(item.dateInstallDone);
-                            const planInstallPoint = pointStyle(item.dateInstallPlan);
-                            const isOverdue = item.dateDesignDeadline && !item.dateToWork && item.dateDesignDeadline < startOfDay(new Date());
-
-                            const handleDaysBlur = (field, fallback) => (e) => {
-                                if (!canManage) return;
-                                const parsed = clampDays(e.target.value, fallback);
-                                e.target.value = String(parsed);
-                                if (parsed !== Number(item.order[field] || fallback)) {
-                                    onPlanUpdate(item.order.id, { [field]: parsed });
-                                }
-                            };
+                            const statusTone =
+                                item.tone === 'danger'
+                                    ? 'border-rose-200 bg-rose-100 text-rose-700'
+                                    : item.tone === 'warning'
+                                        ? 'border-amber-200 bg-amber-100 text-amber-700'
+                                        : 'border-sky-200 bg-sky-100 text-sky-700';
 
                             return (
-                                <div key={item.order.id} className="grid grid-cols-[360px_1fr] border-b border-slate-200/30 hover:bg-white/40 transition">
-                                    <div className="p-3">
-                                        <button
-                                            onClick={() => onSelectOrder(item.order)}
-                                            className="text-left w-full group"
-                                            title="Відкрити замовлення"
-                                        >
-                                            <div className="font-black text-slate-800 group-hover:text-blue-600 transition">
-                                                #{item.order.id} {item.order.name}
-                                            </div>
-                                            <div className="text-[11px] mt-1 text-slate-500">
-                                                Дедлайн: {item.dateDesignDeadline ? fmt(item.dateDesignDeadline) : "--.--"}
-                                                {isOverdue ? <span className="ml-1 text-red-600 font-bold">прострочено</span> : null}
-                                            </div>
-                                        </button>
-
-                                        <div className="mt-2 grid grid-cols-2 gap-2">
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase">
-                                                План монтажу
-                                                <input
-                                                    type="date"
-                                                    className="mt-1 w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 disabled:bg-slate-100"
-                                                    disabled={!canManage}
-                                                    value={item.order.date_installation_plan || ''}
-                                                    onChange={(e) => {
-                                                        if (!canManage) return;
-                                                        onPlanUpdate(item.order.id, { date_installation_plan: e.target.value || null });
-                                                    }}
-                                                />
-                                            </label>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase">
-                                                Конструктив
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="60"
-                                                    className="mt-1 w-full text-xs p-1.5 bg-white border border-blue-200 rounded-lg font-bold text-slate-700 disabled:bg-slate-100"
-                                                    disabled={!canManage}
-                                                    defaultValue={item.constructive}
-                                                    onBlur={handleDaysBlur("constructive_days", 5)}
-                                                />
-                                            </label>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase">
-                                                Комплектація
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="60"
-                                                    className="mt-1 w-full text-xs p-1.5 bg-white border border-amber-200 rounded-lg font-bold text-slate-700 disabled:bg-slate-100"
-                                                    disabled={!canManage}
-                                                    defaultValue={item.complectation}
-                                                    onBlur={handleDaysBlur("complectation_days", 2)}
-                                                />
-                                            </label>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase">
-                                                Предзбірка / Монтаж
-                                                <div className="mt-1 grid grid-cols-2 gap-1">
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        max="60"
-                                                        className="w-full text-xs p-1.5 bg-white border border-violet-200 rounded-lg font-bold text-slate-700 disabled:bg-slate-100"
-                                                        disabled={!canManage}
-                                                        defaultValue={item.preassembly}
-                                                        onBlur={handleDaysBlur("preassembly_days", 1)}
-                                                        title="Предзбірка"
-                                                    />
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        max="60"
-                                                        className="w-full text-xs p-1.5 bg-white border border-emerald-200 rounded-lg font-bold text-slate-700 disabled:bg-slate-100"
-                                                        disabled={!canManage}
-                                                        defaultValue={item.installation}
-                                                        onBlur={handleDaysBlur("installation_days", 3)}
-                                                        title="Монтаж"
-                                                    />
+                                <div
+                                    key={item.order.id}
+                                    className="grid border-b border-slate-200 last:border-b-0"
+                                    style={{ gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px ${timelineWidth}px` }}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => onSelectOrder(item.order)}
+                                        className="sticky left-0 z-[60] border-r border-slate-200 bg-white px-3 py-3 text-left shadow-[4px_0_12px_-10px_rgba(15,23,42,0.28),1px_0_0_0_rgba(226,232,240,1)] transition hover:bg-slate-50"
+                                        title="Відкрити замовлення"
+                                    >
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-[14px] font-black text-slate-800">
+                                                        #{item.order.id} {item.order.name}
+                                                    </div>
+                                                    <div className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                                                        Старт {formatDate(item.productionStart)} · Дедлайн {formatDate(item.dateDesignDeadline)} · Монтаж {formatDate(item.dateInstallPlan)}
+                                                    </div>
                                                 </div>
-                                            </label>
+                                                <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide ${statusTone}`}>
+                                                    {item.status}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-slate-400">
+                                                <span>К {item.days.constructive}д</span>
+                                                <span>Комп {item.days.complectation}д</span>
+                                                <span>ПЗ {item.days.preassembly}д</span>
+                                                <span>М {item.days.installation}д</span>
+                                            </div>
                                         </div>
-                                    </div>
+                                    </button>
 
-                                    <div className="relative p-3 h-[118px]">
-                                        <div className="absolute inset-y-2 left-3 right-3 rounded-xl bg-gradient-to-r from-slate-100/80 to-slate-50/80 border border-slate-200/50" />
+                                    <div
+                                        className="relative z-0 h-[82px] overflow-hidden bg-white"
+                                        style={{
+                                            backgroundImage: `
+                                                repeating-linear-gradient(
+                                                    to right,
+                                                    transparent 0,
+                                                    transparent calc(${dayWidthPercent}% - 1px),
+                                                    rgba(203, 213, 225, 0.85) calc(${dayWidthPercent}% - 1px),
+                                                    rgba(203, 213, 225, 0.85) ${dayWidthPercent}%
+                                                )
+                                            `,
+                                        }}
+                                    >
+                                        <div className="absolute inset-y-0 left-0 right-0 bg-gradient-to-r from-transparent via-amber-50/70 to-transparent" />
 
-                                        <div
-                                            className="absolute top-2 bottom-2 w-[2px] bg-red-400/80 z-20"
-                                            style={{ left: `calc(${todayOffset}% + 12px)` }}
-                                            title="Сьогодні"
-                                        />
-
-                                        {constructiveSeg && (
+                                        {todayStyle ? (
                                             <div
-                                                className="absolute top-[28px] h-2 rounded-full bg-blue-500/85 z-10"
-                                                style={{
-                                                    left: `calc(${constructiveSeg.left} + 12px)`,
-                                                    width: `calc(${constructiveSeg.width} - 2px)`,
-                                                }}
-                                                title={`Конструктив (${item.constructive} дн.)`}
+                                                className="absolute inset-y-0 z-10 w-px bg-slate-400/50"
+                                                style={todayStyle}
                                             />
-                                        )}
+                                        ) : null}
 
-                                        {complectationSeg && (
-                                            <div
-                                                className="absolute top-[42px] h-2 rounded-full bg-amber-500/85 z-10"
-                                                style={{
-                                                    left: `calc(${complectationSeg.left} + 12px)`,
-                                                    width: `calc(${complectationSeg.width} - 2px)`,
-                                                }}
-                                                title={`Комплектація (${item.complectation} дн.)`}
-                                            />
-                                        )}
+                                        <div className="absolute left-0 right-0 top-1/2 z-10 h-px -translate-y-1/2 bg-slate-300" />
 
-                                        {preassemblySeg && (
-                                            <div
-                                                className="absolute top-[56px] h-2 rounded-full bg-violet-500/85 z-10"
-                                                style={{
-                                                    left: `calc(${preassemblySeg.left} + 12px)`,
-                                                    width: `calc(${preassemblySeg.width} - 2px)`,
-                                                }}
-                                                title={`Предзбірка (${item.preassembly} дн.)`}
-                                            />
-                                        )}
+                                        {item.stages.map((stage, index) => {
+                                            const stageStyle = getRangeStyle(timeline.start, totalDays, stage.start, stage.end);
+                                            if (!stageStyle) return null;
 
-                                        {installationSeg && (
-                                            <div
-                                                className="absolute top-[70px] h-2 rounded-full bg-emerald-500/85 z-10"
-                                                style={{
-                                                    left: `calc(${installationSeg.left} + 12px)`,
-                                                    width: `calc(${installationSeg.width} - 2px)`,
-                                                }}
-                                                title={`Монтаж (${item.installation} дн.)`}
-                                            />
-                                        )}
+                                            const radiusClass =
+                                                index === 0
+                                                    ? 'rounded-l-full'
+                                                    : index === item.stages.length - 1
+                                                        ? 'rounded-r-full'
+                                                        : '';
 
-                                        {workPoint && (
-                                            <div
-                                                className="absolute top-4 w-2.5 h-2.5 rounded-full bg-indigo-700 z-20"
-                                                style={{ left: `calc(${workPoint.left} + 12px - 4px)` }}
-                                                title="Передано в роботу"
-                                            />
-                                        )}
+                                            return (
+                                                <div
+                                                    key={`${item.order.id}-${stage.key}`}
+                                                    className={`absolute top-1/2 z-20 h-4 -translate-y-1/2 ${radiusClass}`}
+                                                    style={{
+                                                        ...stageStyle,
+                                                        backgroundColor: stage.color,
+                                                    }}
+                                                    title={`${stage.label}: ${formatDate(stage.start)} - ${formatDate(stage.end)}`}
+                                                />
+                                            );
+                                        })}
 
-                                        {deadlinePoint && (
+                                        {item.dateDesignDeadline ? (
                                             <div
-                                                className="absolute top-4 w-2.5 h-2.5 rounded-full bg-red-600 z-20"
-                                                style={{ left: `calc(${deadlinePoint.left} + 12px - 4px)` }}
-                                                title="Дедлайн конструктиву"
+                                                className="absolute top-[14px] z-30 h-8 w-[3px] bg-red-500"
+                                                style={getMarkerStyle(timeline.start, totalDays, item.dateDesignDeadline, 0.5)}
+                                                title={`Дедлайн конструктиву: ${formatDate(item.dateDesignDeadline)}`}
                                             />
-                                        )}
+                                        ) : null}
 
-                                        {planInstallPoint && (
+                                        {item.dateInstallPlan ? (
                                             <div
-                                                className="absolute top-[66px] w-2.5 h-2.5 rounded-full bg-emerald-700 z-20"
-                                                style={{ left: `calc(${planInstallPoint.left} + 12px - 4px)` }}
-                                                title="План старту монтажу"
+                                                className="absolute bottom-[12px] z-30 h-6 w-[3px] bg-emerald-600"
+                                                style={getMarkerStyle(timeline.start, totalDays, item.dateInstallPlan, 0.5)}
+                                                title={`План монтажу: ${formatDate(item.dateInstallPlan)}`}
                                             />
-                                        )}
+                                        ) : null}
 
-                                        {installDonePoint && (
+                                        {item.dateInstallDone ? (
                                             <div
-                                                className="absolute top-[84px] w-2.5 h-2.5 rounded-full bg-emerald-900 z-20"
-                                                style={{ left: `calc(${installDonePoint.left} + 12px - 4px)` }}
-                                                title="Факт монтажу"
+                                                className="absolute bottom-[12px] z-30 h-6 w-[3px] bg-emerald-900"
+                                                style={getMarkerStyle(timeline.start, totalDays, item.dateInstallDone, 0.5)}
+                                                title={`Факт монтажу: ${formatDate(item.dateInstallDone)}`}
                                             />
-                                        )}
+                                        ) : null}
                                     </div>
                                 </div>
                             );
@@ -413,14 +488,19 @@ const GanttView = ({ orders, onSelectOrder, canManage, onPlanUpdate }) => {
                 </div>
             </div>
 
-            <div className="p-3 bg-white/70 border-t border-slate-200/40 text-[11px] font-bold text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
-                <span><span className="inline-block w-2 h-2 rounded-full bg-indigo-700 mr-1" />Передано в роботу</span>
-                <span><span className="inline-block w-2 h-2 rounded-full bg-red-600 mr-1" />Дедлайн конструктиву</span>
-                <span><span className="inline-block w-3 h-3 rounded-full bg-blue-500/85 mr-1 align-middle" />Конструктив</span>
-                <span><span className="inline-block w-3 h-3 rounded-full bg-amber-500/85 mr-1 align-middle" />Комплектація</span>
-                <span><span className="inline-block w-3 h-3 rounded-full bg-violet-500/85 mr-1 align-middle" />Предзбірка</span>
-                <span><span className="inline-block w-3 h-3 rounded-full bg-emerald-500/85 mr-1 align-middle" />Монтаж</span>
-                <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-900 mr-1" />Факт монтажу</span>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-[11px] font-bold text-slate-500">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-sky-400 align-middle" />Конструктив</span>
+                    <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-amber-400 align-middle" />Комплектація</span>
+                    <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-violet-400 align-middle" />Предзбірка</span>
+                    <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-emerald-400 align-middle" />Монтаж</span>
+                    <span><span className="mr-1 inline-block h-5 w-[3px] bg-red-500 align-middle" />Дедлайн конструктиву</span>
+                    <span><span className="mr-1 inline-block h-5 w-[3px] bg-emerald-600 align-middle" />План монтажу</span>
+                    <span><span className="mr-1 inline-block h-5 w-[3px] bg-emerald-900 align-middle" />Факт монтажу</span>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                    Шкала по днях
+                </div>
             </div>
         </div>
     );

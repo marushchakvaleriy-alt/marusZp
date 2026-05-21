@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import date
 from sqlmodel import Field, SQLModel
 from pydantic import BaseModel
-from financial_logic import calculate_constructor_financials
+from financial_logic import calculate_constructor_financials, calculate_manager_financials
 
 # User Model
 class User(SQLModel, table=True):
@@ -94,6 +94,7 @@ class OrderBase(SQLModel):
     material_cost: float = Field(default=0.0)  # Cost of materials
     product_types: Optional[str] = None  # JSON array of product types
     date_received: Optional[date] = None
+    date_manager_handover: Optional[date] = None
     date_design_deadline: Optional[date] = None # Deadline for constructor
     date_to_work: Optional[date] = None
     date_advance_paid: Optional[date] = None
@@ -112,6 +113,14 @@ class OrderBase(SQLModel):
     complectation_days: int = Field(default=2)  # Planned duration of "Комплектація"
     preassembly_days: int = Field(default=1)  # Planned duration of "Предзбірка"
     installation_days: int = Field(default=3)  # Planned installation duration in days
+    constructive_start_date: Optional[date] = None
+    constructive_end_date: Optional[date] = None
+    complectation_start_date: Optional[date] = None
+    complectation_end_date: Optional[date] = None
+    preassembly_start_date: Optional[date] = None
+    preassembly_end_date: Optional[date] = None
+    installation_start_date: Optional[date] = None
+    installation_end_date: Optional[date] = None
     
     # Manager payment tracking
     manager_paid_amount: float = Field(default=0.0)
@@ -126,6 +135,7 @@ class Deduction(SQLModel, table=True):
     order_id: int = Field(foreign_key="order.id")
     amount: float
     description: str
+    target_role: str = Field(default="constructor")  # constructor | manager
     date_created: date
     is_paid: bool = False
     date_paid: Optional[date] = None
@@ -139,6 +149,7 @@ class OrderUpdate(SQLModel):
     material_cost: Optional[float] = None
     product_types: Optional[str] = None
     date_received: Optional[date] = None
+    date_manager_handover: Optional[date] = None
     date_design_deadline: Optional[date] = None
     date_to_work: Optional[date] = None
     date_advance_paid: Optional[date] = None
@@ -157,6 +168,14 @@ class OrderUpdate(SQLModel):
     complectation_days: Optional[int] = None
     preassembly_days: Optional[int] = None
     installation_days: Optional[int] = None
+    constructive_start_date: Optional[date] = None
+    constructive_end_date: Optional[date] = None
+    complectation_start_date: Optional[date] = None
+    complectation_end_date: Optional[date] = None
+    preassembly_start_date: Optional[date] = None
+    preassembly_end_date: Optional[date] = None
+    installation_start_date: Optional[date] = None
+    installation_end_date: Optional[date] = None
 
 class OrderRead(OrderBase):
     id: int
@@ -172,8 +191,16 @@ class OrderRead(OrderBase):
     constructor_id: Optional[int] = None
     manager_id: Optional[int] = None
     manager_bonus: float = 0.0
+    manager_total_bonus: float = 0.0
     manager_paid_amount: float = 0.0
+    manager_paid_active_amount: float = 0.0
     manager_remaining: float = 0.0
+    manager_total_remaining: float = 0.0
+    manager_current_debt: float = 0.0
+    manager_stage1_percent: float = 50.0
+    manager_stage2_percent: float = 50.0
+    manager_stage1_amount: float = 0.0
+    manager_stage2_amount: float = 0.0
 
     @classmethod
     def from_order(cls, order: Order, session_or_constructor=None):
@@ -200,17 +227,13 @@ class OrderRead(OrderBase):
         )
         bonus = constructor_financials["bonus"]
 
-        # 1b. Determine manager bonus amount
-        manager_bonus = 0.0
-        if manager and hasattr(manager, 'salary_mode') and hasattr(manager, 'salary_percent'):
-            if manager.salary_mode == 'fixed_amount':
-                manager_bonus = manager.salary_percent
-            elif manager.salary_mode == 'materials_percent':
-                manager_bonus = (order.material_cost or 0) * (manager.salary_percent / 100)
-            else:
-                manager_bonus = order.price * (manager.salary_percent / 100)
-        
-        manager_remaining = max(0, manager_bonus - (order.manager_paid_amount or 0))
+        manager_financials = calculate_manager_financials(
+            order,
+            session=session,
+            manager=manager,
+        )
+        manager_bonus = manager_financials["active_amount"]
+        manager_remaining = manager_financials["current_debt"]
 
         advance_amount = constructor_financials["advance_amount"]
         final_amount = constructor_financials["final_amount"]
@@ -242,6 +265,7 @@ class OrderRead(OrderBase):
             material_cost=order.material_cost,
             product_types=order.product_types,
             date_received=order.date_received,
+            date_manager_handover=order.date_manager_handover,
             date_design_deadline=order.date_design_deadline,
             date_to_work=order.date_to_work,
             date_advance_paid=date_advance_paid or order.date_advance_paid,
@@ -257,6 +281,14 @@ class OrderRead(OrderBase):
             complectation_days=order.complectation_days or 2,
             preassembly_days=order.preassembly_days or 1,
             installation_days=order.installation_days or 3,
+            constructive_start_date=order.constructive_start_date,
+            constructive_end_date=order.constructive_end_date,
+            complectation_start_date=order.complectation_start_date,
+            complectation_end_date=order.complectation_end_date,
+            preassembly_start_date=order.preassembly_start_date,
+            preassembly_end_date=order.preassembly_end_date,
+            installation_start_date=order.installation_start_date,
+            installation_end_date=order.installation_end_date,
             bonus=bonus,
             advance_amount=advance_amount,
             advance_remaining=advance_remaining,
@@ -271,8 +303,16 @@ class OrderRead(OrderBase):
             constructor_id=order.constructor_id,
             manager_id=order.manager_id,
             manager_bonus=manager_bonus,
+            manager_total_bonus=manager_financials["total_bonus"],
             manager_paid_amount=order.manager_paid_amount,
-            manager_remaining=manager_remaining
+            manager_paid_active_amount=manager_financials["active_paid_amount"],
+            manager_remaining=manager_remaining,
+            manager_total_remaining=manager_financials["total_remaining"],
+            manager_current_debt=manager_financials["current_debt"],
+            manager_stage1_percent=manager_financials["stage1_percent"],
+            manager_stage2_percent=manager_financials["stage2_percent"],
+            manager_stage1_amount=manager_financials["raw_stage1_amount"],
+            manager_stage2_amount=manager_financials["raw_stage2_amount"],
         )
 
     def __init__(self, **kwargs):
@@ -293,6 +333,7 @@ class DeductionCreate(BaseModel):
     order_id: int
     amount: float
     description: str
+    target_role: str = "constructor"
     date_created: date
 
 class DeductionRead(BaseModel):
@@ -301,6 +342,7 @@ class DeductionRead(BaseModel):
     order_name: str  # For display
     amount: float
     description: str
+    target_role: str = "constructor"
     date_created: date
     is_paid: bool
     date_paid: Optional[date] = None
@@ -313,6 +355,7 @@ class DeductionRead(BaseModel):
             order_name=order_name,
             amount=deduction.amount,
             description=deduction.description,
+            target_role=getattr(deduction, "target_role", "constructor") or "constructor",
             date_created=deduction.date_created,
             is_paid=deduction.is_paid,
             date_paid=deduction.date_paid

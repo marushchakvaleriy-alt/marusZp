@@ -9,6 +9,11 @@ import UKDatePicker from './UKDatePicker';
 
 
 const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+    const isSuperAdmin = user?.role === 'super_admin';
+    const isManager = user?.role === 'manager';
+    const canManage = isAdmin || isManager;
     const [formData, setFormData] = useState({
         name: '',
         price: '',
@@ -28,11 +33,6 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
     const [constructors, setConstructors] = useState([]);
     const [managers, setManagers] = useState([]);
 
-    const { user } = useAuth();
-    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-    const isManager = user?.role === 'manager';
-    const canManage = isAdmin || isManager;
-
     useEffect(() => {
         if (isOpen && canManage) {
             getUsers().then(users => {
@@ -41,6 +41,15 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
             }).catch(console.error);
         }
     }, [isOpen, canManage]);
+
+    useEffect(() => {
+        if (isOpen && isManager && user?.id) {
+            setFormData(prev => ({
+                ...prev,
+                manager_id: String(user.id)
+            }));
+        }
+    }, [isOpen, isManager, user]);
 
     const productOptions = [
         'Кухня', 'Шафа', 'Передпокій', 'Санвузол', 'Вітальня',
@@ -91,7 +100,7 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
             product_types: JSON.stringify(formData.product_types),
             date_to_work: null,
             constructor_id: formData.constructor_id ? parseInt(formData.constructor_id) : null,
-            manager_id: formData.manager_id ? parseInt(formData.manager_id) : null
+            manager_id: isManager ? user.id : (formData.manager_id ? parseInt(formData.manager_id) : null)
         });
         setFormData({
             name: '',
@@ -104,7 +113,7 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
             installation_days: 3,
             product_types: [],
             constructor_id: '',
-            manager_id: '',
+            manager_id: isManager && user?.id ? String(user.id) : '',
             material_cost: '',
             fixed_bonus: ''
         });
@@ -263,8 +272,8 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
                         </div>
                     )}
 
-                    {isAdmin && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(isAdmin || isManager) && (
+                        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : ''} gap-4`}>
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити конструктора</label>
                                 <select
@@ -280,21 +289,23 @@ const CreateOrderModal = ({ isOpen, onClose, onSave }) => {
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити менеджера</label>
-                                <select
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                                    value={formData.manager_id}
-                                    onChange={e => setFormData({ ...formData, manager_id: e.target.value })}
-                                >
-                                    <option value="">-- Не призначено --</option>
-                                    {managers.map(u => (
-                                        <option key={u.id} value={u.id}>
-                                            {u.full_name || u.username} ({u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : 'Менеджер'})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                            {isAdmin && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Призначити менеджера</label>
+                                    <select
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                                        value={formData.manager_id}
+                                        onChange={e => setFormData({ ...formData, manager_id: e.target.value })}
+                                    >
+                                        <option value="">-- Не призначено --</option>
+                                        {managers.map(u => (
+                                            <option key={u.id} value={u.id}>
+                                                {u.full_name || u.username} ({u.role === 'super_admin' ? 'Супер-Адмін' : u.role === 'admin' ? 'Адмін' : 'Менеджер'})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -344,8 +355,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
     const [constructors, setConstructors] = useState([]);
     const [managers, setManagers] = useState([]);
     const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
     const isManager = user?.role === 'manager';
+    const canViewManagerTab = isAdmin || isManager;
+    const canViewGantt = isAdmin || isManager;
     // Managers can manage orders (create, edit, assign) but might have fewer financial rights or deletion rights
     // Managers can manage orders, but double check role isn't constructor or undefined
     const canManage = (isAdmin || isManager) && user?.role !== 'constructor';
@@ -371,6 +385,18 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
 
     // Keep showFinancials for price column and fines
     const showFinancials = true;
+
+    useEffect(() => {
+        if (!canViewManagerTab && activeTab === 'managers') {
+            setActiveTab('constructors');
+        }
+    }, [activeTab, canViewManagerTab]);
+
+    useEffect(() => {
+        if (!canViewGantt && viewLayout === 'gantt') {
+            setViewLayout('list');
+        }
+    }, [canViewGantt, viewLayout]);
 
     useEffect(() => {
         if (canManage) {
@@ -410,7 +436,11 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
             console.error("Failed to create order:", error);
             const msg = error.response?.data?.detail || "Помилка при створенні замовлення";
             if (msg.includes("UndefinedColumn") || msg.includes("does not exist")) {
-                alert("🔴 УВАГА! База даних не оновлена.\n\n👉 Натисніть ЧЕРВОНУ кнопку з ключем (🔧) біля кнопки 'Додати платіж', щоб виправити це автоматично.");
+                if (isSuperAdmin) {
+                    alert("🔴 УВАГА! База даних не оновлена.\n\n👉 Натисніть ЧЕРВОНУ кнопку з ключем (🔧) біля кнопки 'Додати платіж', щоб виправити це автоматично.");
+                } else {
+                    alert("🔴 УВАГА! База даних не оновлена.\n\n👉 Попросіть супер-адміна запустити виправлення схеми (кнопка 🔧).");
+                }
             } else {
                 alert(msg);
             }
@@ -451,6 +481,28 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
         }
     };
 
+    const handleFixDatabase = async () => {
+        if (!isSuperAdmin) return;
+        const confirmed = window.confirm("Запустити автоматичне виправлення структури бази даних?");
+        if (!confirmed) return;
+
+        try {
+            const response = await api.get('/fix-db');
+            const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
+
+            if (logs.length > 0) {
+                alert(`✅ Виправлення завершено.\n\nОстанні кроки:\n${logs.slice(-8).join('\n')}`);
+            } else {
+                alert("✅ Виправлення завершено.");
+            }
+            fetchOrders();
+        } catch (error) {
+            console.error("Failed to run DB fix:", error);
+            const detail = error?.response?.data?.detail;
+            alert(detail || "Помилка при виправленні бази даних.");
+        }
+    };
+
     // Filter orders by completion status and search query
     const filteredOrders = orders.filter(order => {
         const isCompleted = !!order.date_final_paid || (!!order.date_installation && order.remainder_amount <= 0.01);
@@ -484,45 +536,35 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     >
                         <i className="fas fa-drafting-compass mr-2"></i> Конструктори
                     </button>
-                    <button
-                        onClick={() => setActiveTab('managers')}
-                        className={`px-6 py-2 rounded-xl font-bold text-sm transition ${activeTab === 'managers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <i className="fas fa-user-tie mr-2"></i> Менеджери
-                    </button>
+                    {canViewManagerTab && (
+                        <button
+                            onClick={() => setActiveTab('managers')}
+                            className={`px-6 py-2 rounded-xl font-bold text-sm transition ${activeTab === 'managers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <i className="fas fa-user-tie mr-2"></i> Менеджери
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-4">
-                    {isAdmin && (
+                    {isSuperAdmin && (
                         <>
                             <button
-                                onClick={async () => {
-                                    if (confirm("Виправити структуру бази даних?")) {
-                                        try {
-                                            await api.get('/fix-db');
-                                            alert("База даних оновлена! 🛠️");
-                                            window.location.reload();
-                                        } catch (e) {
-                                            alert("Помилка: " + e.message);
-                                        }
-                                    }
-                                }}
-                                className="bg-red-500 text-white px-3 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg hover:bg-red-600 transition flex items-center justify-center gap-2"
-                                title="Виправити базу даних (якщо є помилки)"
+                                onClick={handleFixDatabase}
+                                className="bg-red-500 text-white px-4 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-red-200 hover:bg-red-600 transition flex items-center justify-center"
+                                title="Автовиправлення структури БД"
                             >
-                                <span className="text-xl">🔧</span>
+                                <i className="fas fa-wrench"></i>
                             </button>
-
                             <button
                                 onClick={() => setIsSettingsOpen(true)}
-                                className="bg-slate-700 text-white px-4 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg hover:bg-slate-800 transition flex items-center justify-center gap-2"
-                                title="Налаштування збереження файлів"
+                                className="bg-slate-700 text-white px-4 py-2 rounded-2xl font-bold uppercase text-xs shadow-lg shadow-slate-200 hover:bg-slate-800 transition flex items-center justify-center"
+                                title="Налаштування системи"
                             >
-                                <i className="fas fa-cog text-lg"></i>
+                                <i className="fas fa-cog"></i>
                             </button>
                         </>
                     )}
-
                     {canManage && (
                         <button
                             onClick={() => setIsModalOpen(true)}
@@ -587,15 +629,17 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     >
                         <span>📅</span> Календар
                     </button>
-                    <button
-                        onClick={() => setViewLayout('gantt')}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${viewLayout === 'gantt'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                    >
-                        <span>📊</span> Gantt
-                    </button>
+                    {canViewGantt && (
+                        <button
+                            onClick={() => setViewLayout('gantt')}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1 ${viewLayout === 'gantt'
+                                ? 'bg-white text-blue-600 shadow-sm'
+                                : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            <span>📊</span> Gantt
+                        </button>
+                    )}
                 </div>
 
                 {/* Constructor Filter */}
@@ -697,7 +741,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                         <span className="opacity-0 group-hover:opacity-30 text-slate-400">↕</span>
                                     </div>
                                 </th>
-                                <th className="p-1 px-2 border-b text-center font-bold text-purple-500">Прийнято в роботу</th>
+                                <th className="p-1 px-2 border-b text-center font-bold text-purple-500">Передано конструктору</th>
                                 <th className="p-1 px-2 border-b text-center font-bold text-red-500">Дедлайн</th>
                                 {(canManage) && <th className="p-1 px-2 border-b text-center font-bold text-purple-500">План. монтаж</th>}
                                 
@@ -711,7 +755,7 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                 ) : (
                                     <>
                                         {showFinancials && <th className="p-1 px-2 border-b text-right font-bold text-amber-600">Вартість проекту</th>}
-                                        <th className="p-1 px-2 border-b text-right font-bold text-blue-600">Менеджерська премія</th>
+                                        <th className="p-1 px-2 border-b text-right font-bold text-blue-600">Нараховано менеджеру</th>
                                         <th className="p-1 px-2 border-b text-center font-bold text-emerald-600 bg-emerald-50/10">Виплата менеджеру</th>
                                     </>
                                 )}
@@ -732,10 +776,20 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                     const bonus = order.bonus;
                                     const advanceAmount = showFinancials ? (order.advance_amount ?? (bonus * 0.5)) : 0;
                                     const finalAmount = showFinancials ? (order.final_amount ?? (bonus * 0.5)) : 0;
-                                    const stageAmount = bonus * 0.5;
 
                                     const isPaidStage1 = !!order.date_advance_paid;
                                     const isPaidStage2 = !!order.date_final_paid;
+                                    const managerAccruedAmount = order.manager_bonus || 0;
+                                    const managerTotalBonus = order.manager_total_bonus || 0;
+                                    const managerPaidActiveAmount = order.manager_paid_active_amount || 0;
+                                    const managerRemainingAmount = order.manager_remaining || 0;
+                                    const managerPaymentStatus = managerAccruedAmount <= 0.01
+                                        ? 'Ще не нараховано'
+                                        : managerRemainingAmount <= 0.01
+                                            ? (managerTotalBonus > managerAccruedAmount + 0.01 ? 'Етап 1 закрито' : 'Виплачено')
+                                            : managerPaidActiveAmount > 0
+                                                ? 'Частково'
+                                                : 'Очікує';
 
                                     return (
                                         <tr key={order.id} className="hover:bg-white/10 transition cursor-pointer group" onClick={() => onSelectOrder(order)}>
@@ -837,10 +891,29 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                 })()}
                                             </td>
 
-                                            <td className="p-1 px-2 text-center">
-                                                <span className="text-sm font-bold text-purple-600 italic">
-                                                    {formatDate(order.date_received)}
-                                                </span>
+                                            <td className="p-1 px-2 text-center" onClick={e => e.stopPropagation()}>
+                                                {canManage ? (
+                                                    <div className="flex justify-center">
+                                                        <UKDatePicker
+                                                            selected={order.date_manager_handover}
+                                                            onChange={async (dateValue) => {
+                                                                try {
+                                                                    await updateOrder(order.id, { date_manager_handover: dateValue || null });
+                                                                    fetchOrders();
+                                                                } catch (err) {
+                                                                    alert("Помилка оновлення дати передачі");
+                                                                }
+                                                            }}
+                                                            disabled={!order.constructor_id}
+                                                            className="w-28 text-[12px] font-bold p-1 bg-white border border-slate-200 rounded shadow-sm text-purple-600 focus:border-purple-500 disabled:opacity-50"
+                                                            placeholder={!order.constructor_id ? "Спочатку конструктор" : "ДД.ММ.РРРР"}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-sm font-bold text-purple-600 italic">
+                                                        {formatDate(order.date_manager_handover)}
+                                                    </span>
+                                                )}
                                             </td>
 
                                             <td className="p-4 text-center">
@@ -938,17 +1011,34 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                         </td>
                                                     )}
                                                     <td className="p-1 px-2 text-right font-black text-blue-600 italic text-lg mono">
-                                                        {(order.manager_bonus || 0).toLocaleString()} ₴
+                                                        <div>{managerAccruedAmount.toLocaleString()} ₴</div>
+                                                        {managerTotalBonus > managerAccruedAmount + 0.01 && (
+                                                            <div className="text-[9px] font-bold text-slate-400 not-italic">
+                                                                із {managerTotalBonus.toLocaleString()} ₴
+                                                            </div>
+                                                        )}
                                                     </td>
                                                 </>
                                             )}
 
                                             {(() => {
+                                                const targetRole = activeTab === 'constructors' ? 'constructor' : 'manager';
                                                 const unpaidFines = deductions
-                                                    .filter(d => d.order_id === order.id && !d.is_paid)
+                                                    .filter(d => {
+                                                        if (d.order_id !== order.id || d.is_paid) return false;
+                                                        if (targetRole === 'manager') {
+                                                            return d.target_role === 'manager';
+                                                        } else {
+                                                            return d.target_role === 'constructor' || !d.target_role;
+                                                        }
+                                                    })
                                                     .reduce((sum, d) => sum + d.amount, 0);
 
                                                 const adjustedDebt = order.is_critical_debt ? order.current_debt : order.remainder_amount;
+                                                const displayDebt = activeTab === 'constructors' ? adjustedDebt : managerRemainingAmount;
+                                                const debtIsCritical = activeTab === 'constructors'
+                                                    ? order.is_critical_debt
+                                                    : managerRemainingAmount > 0.01;
                                                 const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && order.advance_remaining <= 0.01);
                                                 const isPaidStage2 = !!order.date_final_paid || (order.date_installation && order.final_remaining <= 0.01);
 
@@ -1008,15 +1098,21 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                             <td className="p-1 px-2 text-center bg-emerald-50/10">
                                                                 <div className="flex flex-col items-center">
                                                                     <span className="text-[10px] font-bold text-slate-500 uppercase mb-1">Статус виплат менеджера</span>
-                                                                    <span className={`text-sm font-black italic mono mb-1 ${order.date_manager_paid ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
-                                                                        {(order.manager_paid_amount || 0).toLocaleString()} / {(order.manager_bonus || 0).toLocaleString()} ₴
-                                                                    </span>
-                                                                    {order.date_manager_paid ? (
-                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">Виплачено {formatDate(order.date_manager_paid)}</span>
-                                                                    ) : (order.manager_paid_amount || 0) > 0 ? (
-                                                                        <span className="text-[9px] font-bold text-orange-400 uppercase">Частково</span>
+                                                                    {managerAccruedAmount > 0.01 ? (
+                                                                        <span className={`text-sm font-black italic mono mb-1 ${managerRemainingAmount <= 0.01 ? 'text-green-600 underline decoration-2' : 'text-slate-400'}`}>
+                                                                            {managerPaidActiveAmount.toLocaleString()} / {managerAccruedAmount.toLocaleString()} ₴
+                                                                        </span>
                                                                     ) : (
-                                                                        <span className="text-[10px] font-bold text-slate-300 uppercase">Очікує</span>
+                                                                        <span className="text-[10px] font-bold text-slate-300 uppercase mb-1">Ще не нараховано</span>
+                                                                    )}
+                                                                    {managerRemainingAmount <= 0.01 && managerAccruedAmount > 0.01 ? (
+                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-md uppercase">
+                                                                            {managerPaymentStatus}
+                                                                        </span>
+                                                                    ) : managerPaidActiveAmount > 0 ? (
+                                                                        <span className="text-[9px] font-bold text-orange-400 uppercase">{managerPaymentStatus}</span>
+                                                                    ) : (
+                                                                        <span className="text-[10px] font-bold text-slate-300 uppercase">{managerPaymentStatus}</span>
                                                                     )}
                                                                 </div>
                                                             </td>
@@ -1033,8 +1129,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                                         )}
 
                                                         {canSeeDebt && (
-                                                            <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
-                                                                {adjustedDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
+                                                            <td className={`p-4 pr-6 text-right font-black text-lg italic mono ${debtIsCritical ? 'text-red-500' : 'text-slate-300'}`}>
+                                                                {displayDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ₴
                                                             </td>
                                                         )}
                                                     </>
@@ -1051,15 +1147,25 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                     <div className="md:hidden divide-y divide-white/20">
                         {filteredOrders.map((order) => {
                             const bonus = order.bonus;
-                            const stageAmount = bonus / 2;
                             const isPaidStage1 = !!order.date_advance_paid || (order.date_to_work && order.advance_remaining <= 0.01);
                             const isPaidStage2 = !!order.date_final_paid || (order.date_installation && order.final_remaining <= 0.01);
+                            const targetRole = activeTab === 'constructors' ? 'constructor' : 'manager';
                             const unpaidFines = deductions
-                                .filter(d => d.order_id === order.id && !d.is_paid)
+                                .filter(d => {
+                                    if (d.order_id !== order.id || d.is_paid) return false;
+                                    if (targetRole === 'manager') {
+                                        return d.target_role === 'manager';
+                                    } else {
+                                        return d.target_role === 'constructor' || !d.target_role;
+                                    }
+                                })
                                 .reduce((sum, d) => sum + d.amount, 0);
                             const adjustedDebt = order.is_critical_debt
                                 ? order.current_debt
                                 : order.remainder_amount;
+                            const displayDebt = activeTab === 'constructors'
+                                ? adjustedDebt
+                                : (order.manager_remaining || 0);
 
                             return (
                                 <div key={order.id} className="p-4 hover:bg-white/20 transition cursor-pointer bg-white/10 backdrop-blur-md mb-2 rounded-xl border border-white/20" onClick={() => onSelectOrder(order)}>
@@ -1079,8 +1185,8 @@ const OrderList = ({ onSelectOrder, onPaymentAdded, refreshTrigger }) => {
                                             <div className="font-black text-slate-800 text-base">{order.price.toLocaleString()} ₴</div>
                                         </div>
                                     </div>
-                                    <div className={`text-sm font-black text-right ${order.is_critical_debt ? 'text-red-500' : 'text-slate-300'}`}>
-                                        Борг: {Math.max(0, adjustedDebt).toLocaleString()} ₴
+                                    <div className={`text-sm font-black text-right ${(activeTab === 'constructors' ? order.is_critical_debt : (order.manager_remaining || 0) > 0.01) ? 'text-red-500' : 'text-slate-300'}`}>
+                                        Борг: {Math.max(0, displayDebt).toLocaleString()} ₴
                                     </div>
                                 </div>
                             );

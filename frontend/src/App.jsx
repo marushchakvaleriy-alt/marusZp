@@ -86,16 +86,35 @@ function App() {
             window.location.reload();
         } catch (error) {
             console.error("Reset failed:", error);
-            if (error.response && error.response.status === 403) {
+            const status = error?.response?.status;
+            const detail = error?.response?.data?.detail;
+            if (status === 403) {
                 alert("Невірний пароль!");
+            } else if (status === 503) {
+                alert(detail || "Очищення бази тимчасово вимкнено на сервері.");
             } else {
-                alert("Помилка при очищенні бази даних.");
+                alert(detail || "Помилка при очищенні бази даних.");
             }
         }
     };
 
     if (loading) {
-        return <div className="min-h-screen flex items-center justify-center text-slate-500">Завантаження...</div>;
+        return (
+            <div
+                style={{
+                    minHeight: '100vh',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#f8fafc',
+                    color: '#0f172a',
+                    fontWeight: 700,
+                    fontSize: '16px'
+                }}
+            >
+                Завантаження...
+            </div>
+        );
     }
 
     if (!user) {
@@ -162,19 +181,21 @@ function App() {
                                     )}
                                 </>
                             )}
-                            <button
-                                onClick={() => navigateTo('activity')}
-                                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
-                            >
-                                <i className="fas fa-list-ul"></i> Історія дій
-                            </button>
+                            {isAdmin && (
+                                <button
+                                    onClick={() => navigateTo('activity')}
+                                    className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
+                                >
+                                    <i className="fas fa-list-ul"></i> Історія дій
+                                </button>
+                            )}
                             <button
                                 onClick={() => navigateTo('deductions')}
                                 className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition flex items-center gap-2"
                             >
-                                <i className="fas fa-exclamation-triangle"></i> {(isAdmin || user.role === 'manager') ? 'Провини конструкторів' : 'Мої провини'}
+                                <i className="fas fa-exclamation-triangle"></i> {(isAdmin || user.role === 'manager') ? 'Провини / штрафи' : 'Мої провини'}
                             </button>
-                            {(isAdmin || user.role === 'constructor') && (
+                            {(isAdmin || user.role === 'constructor' || user.role === 'manager') && (
                                 <button
                                     onClick={() => navigateTo('payments')}
                                     className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
@@ -219,7 +240,7 @@ function App() {
                     </>
                 )}
 
-                {currentView === 'activity' && (
+                {currentView === 'activity' && isAdmin && (
                     <>
                         <button
                             onClick={() => navigateTo('list')}
