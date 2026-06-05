@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.gitignore
+*.log
+dev.err.log
+dev.out.log
+test-*.html
