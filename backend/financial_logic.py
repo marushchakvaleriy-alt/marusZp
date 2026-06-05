@@ -194,6 +194,8 @@ def build_constructor_financial_snapshot(
         current_debt += advance_remaining
     if stage2_active:
         current_debt += final_remaining
+    
+    current_debt -= fine_remaining
 
     return {
         "advance_amount": advance_amount,
@@ -203,8 +205,9 @@ def build_constructor_financial_snapshot(
         "advance_remaining": advance_remaining,
         "final_remaining": final_remaining,
         "current_debt": current_debt,
-        "remainder_amount": advance_remaining + final_remaining,
+        "remainder_amount": advance_remaining + final_remaining - fine_remaining,
         "unpaid_deductions": unpaid_deductions,
+        "unabsorbed_deductions": fine_remaining,
     }
 
 
@@ -267,6 +270,8 @@ def build_manager_financial_snapshot(
         current_debt += stage1_remaining
     if stage2_active:
         current_debt += stage2_remaining
+    
+    current_debt -= fine_remaining
 
     return {
         "paid_amount": paid_amount,
@@ -278,8 +283,9 @@ def build_manager_financial_snapshot(
         "active_paid_amount": active_paid_amount,
         "current_debt": current_debt,
         "total_bonus": total_bonus,
-        "total_remaining": max(0.0, total_bonus - paid_amount),
+        "total_remaining": total_bonus - paid_amount - fine_remaining,
         "unpaid_deductions": unpaid_deductions,
+        "unabsorbed_deductions": fine_remaining,
     }
 
 

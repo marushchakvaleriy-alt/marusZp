@@ -151,8 +151,12 @@ const Dashboard = ({ refreshTrigger }) => {
                                     </p>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <p className="text-[10px] text-red-300 font-bold uppercase">Борг</p>
-                                            <p className="text-lg font-black text-red-600">{m.debt.toLocaleString()}</p>
+                                            <p className="text-[10px] font-bold uppercase" style={{ color: m.debt >= 0 ? '#fca5a5' : '#86efac' }}>
+                                                {m.debt >= 0 ? 'Борг' : 'Винен'}
+                                            </p>
+                                            <p className="text-lg font-black" style={{ color: m.debt >= 0 ? '#ef4444' : '#22c55e' }}>
+                                                {Math.abs(m.debt).toLocaleString()}
+                                            </p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-yellow-300 font-bold uppercase">Вільні</p>

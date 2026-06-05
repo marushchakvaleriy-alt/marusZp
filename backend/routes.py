@@ -1896,6 +1896,7 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
         # Global Manager Stats
         total_manager_bonus = 0.0
         total_manager_paid = 0.0
+        global_total_manager_debt = 0.0
         
         for m in managers:
             m_orders = session.exec(select(Order).where(Order.manager_id == m.id)).all()
@@ -1934,6 +1935,7 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             })
             total_manager_bonus += m_bonus_total
             total_manager_paid += m_paid_total
+            global_total_manager_debt += m_debt
 
         return {
             "total_received": total_received,
@@ -1941,7 +1943,7 @@ def get_financial_stats(session: Session = Depends(get_session), current_user: U
             "unallocated": unallocated,
             "total_deductions": total_deductions,
             "total_debt": global_total_debt,
-            "total_manager_debt": total_manager_bonus - total_manager_paid,
+            "total_manager_debt": global_total_manager_debt,
             "constructors_stats": constructors_stats,
             "manager_stats": manager_stats
         }

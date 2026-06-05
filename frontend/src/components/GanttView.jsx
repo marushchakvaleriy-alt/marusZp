@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LEFT_COLUMN_WIDTH = 350;
@@ -143,9 +143,16 @@ const resolveStageRange = (fallbackStart, fallbackEnd, manualStart, manualEnd, d
 
 const GanttView = ({ orders, onSelectOrder, canManage }) => {
     const today = startOfDay(new Date());
+    const containerRef = useRef(null);
+
+
 
     const prepared = useMemo(() => {
-        return orders.map((order) => {
+        const activeOrders = orders.filter(
+            (order) => !(!!order.date_final_paid || (!!order.date_installation && order.remainder_amount <= 0.01))
+        );
+
+        return activeOrders.map((order) => {
             const dateReceived = parseDate(order.date_received);
             const dateToWork = parseDate(order.date_to_work);
             const dateDesignDeadline = parseDate(order.date_design_deadline);
@@ -300,8 +307,14 @@ const GanttView = ({ orders, onSelectOrder, canManage }) => {
             };
         }
 
-        const minDate = new Date(Math.min(...minDates.map((date) => date.getTime())));
-        const maxDate = new Date(Math.max(...maxDates.map((date) => date.getTime())));
+        const minDate = new Date(Math.min(
+            ...minDates.map((date) => date.getTime()),
+            today.getTime()
+        ));
+        const maxDate = new Date(Math.max(
+            ...maxDates.map((date) => date.getTime()),
+            today.getTime()
+        ));
 
         return {
             start: addDays(startOfDay(minDate), -1),
@@ -320,6 +333,17 @@ const GanttView = ({ orders, onSelectOrder, canManage }) => {
     const dayWidthPercent = 100 / totalDays;
     const todayStyle = getMarkerStyle(timeline.start, totalDays, today, 0);
 
+    useEffect(() => {
+        if (containerRef.current) {
+            const container = containerRef.current;
+            const containerWidth = container.clientWidth;
+            const todayOffset = (diffDays(timeline.start, today) / totalDays) * timelineWidth;
+            const visibleTimelineWidth = containerWidth - LEFT_COLUMN_WIDTH;
+            const targetScrollLeft = todayOffset - visibleTimelineWidth / 2;
+            container.scrollLeft = Math.max(0, targetScrollLeft);
+        }
+    }, [timeline, totalDays, timelineWidth, today]);
+
     return (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl">
             <div className="border-b border-slate-200 bg-white/90 px-4 py-3">
@@ -336,7 +360,7 @@ const GanttView = ({ orders, onSelectOrder, canManage }) => {
                 </div>
             </div>
 
-            <div className="max-h-[72vh] overflow-auto">
+            <div ref={containerRef} className="max-h-[72vh] overflow-auto">
                 <div style={{ minWidth: LEFT_COLUMN_WIDTH + timelineWidth }}>
                     <div className="grid" style={{ gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px ${timelineWidth}px` }}>
                         <div className="sticky left-0 top-0 z-[70] flex h-10 items-center justify-between border-r border-b border-slate-200 bg-slate-50 px-3 text-[11px] font-bold uppercase tracking-wide text-slate-500 shadow-[4px_0_12px_-10px_rgba(15,23,42,0.28),1px_0_0_0_rgba(226,232,240,1)]">

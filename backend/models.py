@@ -201,6 +201,8 @@ class OrderRead(OrderBase):
     manager_stage2_percent: float = 50.0
     manager_stage1_amount: float = 0.0
     manager_stage2_amount: float = 0.0
+    unabsorbed_deductions: float = 0.0
+    manager_unabsorbed_deductions: float = 0.0
 
     @classmethod
     def from_order(cls, order: Order, session_or_constructor=None):
@@ -294,7 +296,7 @@ class OrderRead(OrderBase):
             advance_remaining=advance_remaining,
             final_amount=final_amount,
             final_remaining=final_remaining,
-            remainder_amount=advance_remaining + final_remaining,
+            remainder_amount=constructor_financials.get("remainder_amount", advance_remaining + final_remaining),
             is_critical_debt=(
                 (order.date_to_work is not None and advance_remaining > 0.01) or
                 (order.date_installation is not None and final_remaining > 0.01)
@@ -313,6 +315,8 @@ class OrderRead(OrderBase):
             manager_stage2_percent=manager_financials["stage2_percent"],
             manager_stage1_amount=manager_financials["raw_stage1_amount"],
             manager_stage2_amount=manager_financials["raw_stage2_amount"],
+            unabsorbed_deductions=constructor_financials.get("unabsorbed_deductions", 0.0),
+            manager_unabsorbed_deductions=manager_financials.get("unabsorbed_deductions", 0.0),
         )
 
     def __init__(self, **kwargs):
@@ -326,6 +330,8 @@ class OrderRead(OrderBase):
         if self.date_installation and (self.final_remaining > 0.01):
              current_debt += self.final_remaining
              
+        current_debt -= getattr(self, "unabsorbed_deductions", 0.0) or 0.0
+              
         object.__setattr__(self, 'current_debt', current_debt)
 
 # Deduction Pydantic Models
